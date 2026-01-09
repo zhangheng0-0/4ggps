@@ -59,7 +59,7 @@
             margin-top: 1px;
             padding: 1px;
             background: #f5f5f5;
-            border-radius: px;
+            border-radius: 1px;
             font-size: 11px;
         }
         .legend-item {
@@ -152,6 +152,8 @@
 
         // 3. 存储轨迹点和速度信息
         let pathData = []; // 存储 {lnglat, speed} 对象
+        let polylines = []; // 存储所有线段对象
+        let textMarkers = []; // 存储所有文本标记
 
         // 根据速度返回颜色
         function getColorBySpeed(speed) {
@@ -161,58 +163,46 @@
             return '#FF0000';                       // 红色: >45
         }
 
-        // 存储已创建的文本标记
-        let textMarkers = [];
-
-        // 绘制轨迹线段
-        function drawTrajectory() {
-            // 清除旧的轨迹和文本标记
-            map.clearMap();
-            map.add(marker);
-            textMarkers = [];
-
-            // 绘制每个线段,根据速度着色
-            for (let i = 0; i < pathData.length - 1; i++) {
-                const start = pathData[i];
-                const end = pathData[i + 1];
-                const avgSpeed = (start.speed + end.speed) / 2;
+        // 增量绘制新的轨迹线段（优化版 - 只画新线段）
+        function drawNewSegment(newPoint, index) {
+            // 如果不是第一个点,绘制与前一个点的连线
+            if (index > 0) {
+                const prevPoint = pathData[index - 1];
+                const avgSpeed = (prevPoint.speed + newPoint.speed) / 2;
                 
                 const polyline = new AMap.Polyline({
                     map: map,
-                    path: [start.lnglat, end.lnglat],
+                    path: [prevPoint.lnglat, newPoint.lnglat],
                     strokeColor: getColorBySpeed(avgSpeed),
                     strokeOpacity: 0.8,
                     strokeWeight: 6,
                     strokeStyle: "solid",
                 });
+                
+                polylines.push(polyline);
             }
 
-            // 在每个轨迹点上显示速度文字（可以设置间隔显示，避免太密集）
-            // 这里每5个点显示一次，你可以调整间隔
+            // 按间隔显示速度文本（每5个点显示一次）
             const displayInterval = 5;
-            for (let i = 0; i < pathData.length; i++) {
-                if (i % displayInterval === 0 || i === pathData.length - 1) {
-                    const point = pathData[i];
-                    
-                    const text = new AMap.Text({
-                        text: point.speed.toFixed(0),
-                        position: point.lnglat,
-                        offset: new AMap.Pixel(0, -10),
-                        style: {
-                            'background-color': getColorBySpeed(point.speed),
-                            'border': '1px solid #fff',
-                            'border-radius': '3px',
-                            'color': '#fff',
-                            'font-size': '11px',
-                            'font-weight': 'bold',
-                            'padding': '2px 5px',
-                            'box-shadow': '0 2px 4px rgba(0,0,0,0.3)'
-                        }
-                    });
-                    
-                    text.setMap(map);
-                    textMarkers.push(text);
-                }
+            if (index % displayInterval === 0 || index === pathData.length - 1) {
+                const text = new AMap.Text({
+                    text: newPoint.speed.toFixed(0),
+                    position: newPoint.lnglat,
+                    offset: new AMap.Pixel(0, -10),
+                    style: {
+                        'background-color': getColorBySpeed(newPoint.speed),
+                        'border': '1px solid #fff',
+                        'border-radius': '1px',
+                        'color': '#255，255，255',
+                        'font-size': '25px',
+                        'font-weight': 'bold',
+                        'padding': '1px 1px',
+                        'box-shadow': '0 2px 2px rgba(0,0,0,0.3)'
+                    }
+                });
+                
+                text.setMap(map);
+                textMarkers.push(text);
             }
         }
 
@@ -230,8 +220,8 @@
         client.on('connect', () => {
             document.getElementById('conn-status').innerText = '已连接云端';
             document.getElementById('conn-status').className = 'status-on';
-            client.subscribe('T', { qos: 0 });  // 订阅R主题
-            console.log('已订阅主题: R');
+            client.subscribe('T', { qos: 0 });  // 订阅T主题
+            console.log('已订阅主题: T');
         });
 
         client.on('message', (topic, message) => {
@@ -275,8 +265,8 @@
                             speed: speed
                         });
                         
-                        // 重绘轨迹
-                        drawTrajectory();
+                        // 增量绘制新线段（只画新的，不重画旧的）
+                        drawNewSegment({lnglat: lnglat, speed: speed}, pathData.length - 1);
                         
                         // 更新点数
                         document.getElementById('point-count').innerText = pathData.length;
