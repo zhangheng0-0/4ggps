@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GPS 实时监控 - 轨迹版</title>
+    <script type="text/javascript">
+        window._AMapSecurityConfig = { 
+            securityJsCode: 'fcada99047bf6ebd49ca6d8ca81c91c6' 
+        };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=35450666bb081d2f71e0719cce61d27f"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
+        #container { width: 100%; height: 100%; }
+        .info-card {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+            font-family: sans-serif;
+            min-width: 200px;
+        }
+        .status-on { color: green; font-weight: bold; }
+        .status-off { color: red; font-weight: bold; }
+        .info-row {
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 13px;
+        }
+        .info-label {
+            color: #666;
+            font-weight: 500;
+            display: inline-block;
+            width: 80px;
+        }
+        .info-value {
+            color: #333;
+            font-weight: bold;
+        }
+        .speed-display {
+            font-size: 24px;
+            color: #3366FF;
+            font-weight: bold;
+        }
+        .stats {
+            margin-top: 10px;
+            font-size: 12px;
+            border-top: 2px solid #ddd;
+            padding-top: 10px;
+        }
+        .legend {
+            margin-top: 1px;
+            padding: 1px;
+            background: #f5f5f5;
+            border-radius: px;
+            font-size: 11px;
+        }
+        .legend-item {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .legend-color {
+            display: inline-block;
+            width: 20px;
+            height: 3px;
+            vertical-align: middle;
+            margin-right: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="info-card">
+        <h4 style="margin-top:0;">设备状态: <span id="conn-status" class="status-off">未连接</span></h4>
+        
+        <div class="info-row">
+            <span class="info-label">速度:</span>
+            <span class="speed-display" id="speed">-- km/h</span>
+        </div>
+        
+        <div class="info-row">
+            <span class="info-label">经度:</span>
+            <span class="info-value" id="lng">--</span>
+        </div>
+        
+        <div class="info-row">
+            <span class="info-label">纬度:</span>
+            <span class="info-value" id="lat">--</span>
+        </div>
+        
+        <div class="info-row">
+            <span class="info-label">高度:</span>
+            <span class="info-value" id="altitude">--</span>
+        </div>
+        
+        <div class="info-row">
+            <span class="info-label">GPS时间:</span>
+            <span class="info-value" id="gpstime">--</span>
+        </div>
+        
+        <div class="info-row">
+            <span class="info-label">定位状态:</span>
+            <span class="info-value" id="fix-status">--</span>
+        </div>
+        
+        <div class="stats">
+            轨迹点数: <span id="point-count">0</span>
+        </div>
+        
+        <div class="legend">
+            <div><strong>速度图例:</strong></div>
+            <div class="legend-item">
+                <span class="legend-color" style="background:#00FF00;"></span>0-15 km/h
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background:#FFD700;"></span>15-30 km/h
+            </div>
+            
+        </div>
+        <div class="legend">    
+            <div class="legend-item">
+                <span class="legend-color" style="background:#FF6600;"></span>30-45 km/h
+            </div>
+            <div class="legend-item">
+                <span class="legend-color" style="background:#FF0000;"></span>>45 km/h
+            </div>
+        </div>
+    </div>
+
+    <div id="container"></div>
+
+    <script>
+        // 1. 初始化地图
+        const map = new AMap.Map('container', {
+            zoom: 16,
+            center: [113.222351, 33.774272]
+        });
+
+        // 2. 初始化标记(小车)
+        const marker = new AMap.Marker({
+            map: map,
+            icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png',
+            offset: new AMap.Pixel(-13, -30)
+        });
+
+        // 3. 存储轨迹点和速度信息
+        let pathData = []; // 存储 {lnglat, speed} 对象
+
+        // 根据速度返回颜色
+        function getColorBySpeed(speed) {
+            if (speed < 15) return '#00FF00';      // 绿色: 0-15
+            if (speed < 30) return '#FFD700';      // 金色: 15-30
+            if (speed < 45) return '#FF6600';      // 橙色: 30-45
+            return '#FF0000';                       // 红色: >45
+        }
+
+        // 存储已创建的文本标记
+        let textMarkers = [];
+
+        // 绘制轨迹线段
+        function drawTrajectory() {
+            // 清除旧的轨迹和文本标记
+            map.clearMap();
+            map.add(marker);
+            textMarkers = [];
+
+            // 绘制每个线段,根据速度着色
+            for (let i = 0; i < pathData.length - 1; i++) {
+                const start = pathData[i];
+                const end = pathData[i + 1];
+                const avgSpeed = (start.speed + end.speed) / 2;
+                
+                const polyline = new AMap.Polyline({
+                    map: map,
+                    path: [start.lnglat, end.lnglat],
+                    strokeColor: getColorBySpeed(avgSpeed),
+                    strokeOpacity: 0.8,
+                    strokeWeight: 6,
+                    strokeStyle: "solid",
+                });
+            }
+
+            // 在每个轨迹点上显示速度文字（可以设置间隔显示，避免太密集）
+            // 这里每5个点显示一次，你可以调整间隔
+            const displayInterval = 5;
+            for (let i = 0; i < pathData.length; i++) {
+                if (i % displayInterval === 0 || i === pathData.length - 1) {
+                    const point = pathData[i];
+                    
+                    const text = new AMap.Text({
+                        text: point.speed.toFixed(0),
+                        position: point.lnglat,
+                        offset: new AMap.Pixel(0, -10),
+                        style: {
+                            'background-color': getColorBySpeed(point.speed),
+                            'border': '1px solid #fff',
+                            'border-radius': '3px',
+                            'color': '#fff',
+                            'font-size': '11px',
+                            'font-weight': 'bold',
+                            'padding': '2px 5px',
+                            'box-shadow': '0 2px 4px rgba(0,0,0,0.3)'
+                        }
+                    });
+                    
+                    text.setMap(map);
+                    textMarkers.push(text);
+                }
+            }
+        }
+
+        // 4. MQTT 连接配置
+        const url = 'wss://n29ee11b.ala.cn-hangzhou.emqxsl.cn:8084/mqtt';
+        const options = {
+            clientId: 'web_monitor_' + Math.random().toString(16).slice(2, 10),
+            username: 'zxc',
+            password: '123456',
+            clean: true
+        };
+
+        const client = mqtt.connect(url, options);
+
+        client.on('connect', () => {
+            document.getElementById('conn-status').innerText = '已连接云端';
+            document.getElementById('conn-status').className = 'status-on';
+            client.subscribe('T', { qos: 0 });  // 订阅R主题
+            console.log('已订阅主题: R');
+        });
+
+        client.on('message', (topic, message) => {
+            try {
+                const data = JSON.parse(message.toString());
+                
+                // 提取GPS数据
+                const gps = data.gps;
+                if (!gps || !gps.lng || !gps.lat) return;
+                
+                const lng = parseFloat(gps.lng);
+                const lat = parseFloat(gps.lat);
+                const speed = parseFloat(gps.speed) || 0;
+                const altitude = parseFloat(gps.altitude) || 0;
+                const gpsTime = gps.gpstime || '--';
+                const isFix = gps.isFix;
+
+                if (isNaN(lng) || isNaN(lat)) return;
+
+                // 坐标转换 (WGS84 转 GCJ02)
+                AMap.convertFrom([lng, lat], 'gps', function (status, result) {
+                    if (result.info === 'ok') {
+                        const lnglat = result.locations[0];
+                        
+                        // 更新UI显示
+                        document.getElementById('speed').innerText = speed.toFixed(1) + ' km/h';
+                        document.getElementById('speed').style.color = getColorBySpeed(speed);
+                        document.getElementById('lng').innerText = lnglat.lng.toFixed(6);
+                        document.getElementById('lat').innerText = lnglat.lat.toFixed(6);
+                        document.getElementById('altitude').innerText = altitude.toFixed(1) + ' m';
+                        document.getElementById('gpstime').innerText = gpsTime;
+                        document.getElementById('fix-status').innerText = isFix ? '已定位' : '未定位';
+                        document.getElementById('fix-status').style.color = isFix ? 'green' : 'red';
+                        
+                        // 更新标记位置
+                        marker.setPosition(lnglat);
+                        
+                        // 添加到轨迹数据
+                        pathData.push({
+                            lnglat: lnglat,
+                            speed: speed
+                        });
+                        
+                        // 重绘轨迹
+                        drawTrajectory();
+                        
+                        // 更新点数
+                        document.getElementById('point-count').innerText = pathData.length;
+                        
+                        // 平滑移动中心点
+                        map.setCenter(lnglat);
+                    }
+                });
+                
+            } catch (err) {
+                console.error('解析数据失败:', err);
+            }
+        });
+
+        client.on('error', (err) => {
+            document.getElementById('conn-status').innerText = '连接错误';
+            document.getElementById('conn-status').className = 'status-off';
+        });
+    </script>
+</body>
+</html>
