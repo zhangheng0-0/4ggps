@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高德猎鹰 v16.0 (优化版)</title>
+    
+    <script type="text/javascript">
+        window._AMapSecurityConfig = { 
+            securityJsCode: 'fcada99047bf6ebd49ca6d8ca81c91c6'
+        };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=35450666bb081d2f71e0719cce61d27f"></script>
+
+    <style>
+        :root { --primary: #007bff; --bg: #f5f7fa; --border: #ced4da; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; font-size: 14px; }
+        
+        .grid { display: grid; grid-template-columns: 280px 445px 1fr; gap: 20px; height: 85vh; }
+        .panel { background: white; border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .head { padding: 10px 15px; background: #fff; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .body { padding: 15px; overflow-y: auto; flex: 1; }
+        
+        .log-area { height: 120px; margin-top: 15px; background: #222; color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; overflow-y: auto; border-radius: 6px; border: 1px solid #000; }
+
+        .item { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .item:hover { background: #e3f2fd; }
+        .item.active { background: #cce5ff; border-left: 4px solid var(--primary); }
+        
+        button { padding: 6px; border: none; border-radius: 4px; cursor: pointer; color: white; transition: 0.2s; width: 100%; font-size: 12px; }
+        button:hover { opacity: 0.9; }
+        .btn-del { background: #dc3545; width: auto; padding: 2px 8px; }
+        .btn-detail { background: #6c757d; width: auto; padding: 2px 8px; margin-right: 5px; }
+        .btn-blue { background: var(--primary); }
+        .btn-green { background: #28a745; }
+        .btn-orange { background: #fd7e14; }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); width: auto; padding: 2px 8px; }
+
+        input, select { box-sizing: border-box; width: 100%; padding: 8px; margin-bottom: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        .section { border: 1px solid #e9ecef; padding: 10px; border-radius: 4px; margin-bottom: 15px; background: #fff; }
+        .section-title { font-weight: bold; margin-bottom: 10px; color: #495057; border-bottom: 2px solid #f8f9fa; padding-bottom: 5px; }
+        
+        .tabs { display: flex; margin-bottom: 10px; border-bottom: 1px solid #ddd; }
+        .tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; color: #666; }
+        .tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .detail-box { display: none; margin-top: 10px; background: #fafafa; border: 1px solid #eee; padding: 5px; border-radius: 4px; }
+        .detail-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .detail-table th { background: #eee; text-align: left; padding: 4px; }
+        .detail-table td { border-bottom: 1px solid #eee; padding: 4px; font-family: monospace; }
+        
+        #main-map-container { width: 100%; height: 100%; border-radius: 4px; position: relative; }
+        .map-info { position: absolute; top: 10px; left: 10px; z-index: 100; background: white; padding: 10px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 250px; }
+        .map-info h4 { margin: 0 0 5px 0; font-size: 14px; color: #333; }
+        .map-info p { margin: 3px 0; font-size: 12px; color: #666; }
+        
+        .sub-panel { margin-bottom: 15px; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; }
+        .sub-panel-head { background: #f8f9fa; padding: 8px 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e0e0e0; }
+        .sub-panel-body { padding: 10px; max-height: 250px; overflow-y: auto; background: white; }
+    </style>
+</head>
+<body>
+
+    
+
+    <div class="grid">
+        <!-- 1. 服务 & 终端 -->
+        <div class="panel">
+            <div>
+                <strong>⚙️ 设置:</strong>
+                <input type="text" id="apiKey" value="b1a5e72de7d912d7d5b5ea532e8f3eeb" placeholder="输入 Web 服务 Key" style="margin:0;">
+                <button class="btn-blue" onclick="saveKey()" style="width: auto; margin:0;">保存Key</button>
+                <div>
+                <span style="font-size: 12px; color: #dc3545; margin-left: auto;">⚠️ 必须开启 CORS 插件才能调用 API</span>
+                </div>
+            </div>
+            <div class="head">🎯 服务 & 终端</div>
+            <div class="body">
+                <!-- 服务区 -->
+                <div class="sub-panel">
+                    <div class="sub-panel-head">
+                        📦 服务列表
+                        <div>
+                            <button class="btn-green" style="width:auto; padding:2px 8px;" onclick="addService()">+</button>
+                            <button class="btn-outline" onclick="listServices()">🔄</button>
+                        </div>
+                    </div>
+                    <div class="sub-panel-body" id="list-service">请先保存Key并刷新</div>
+                </div>
+
+                <!-- 终端区 -->
+                <div class="sub-panel">
+                    <div class="sub-panel-head">
+                        📱 终端列表
+                        <button class="btn-green" style="width:auto; padding:2px 8px;" onclick="addTerminal()">+</button>
+                    </div>
+                    <div class="sub-panel-body" id="list-terminal">请先选择服务</div>
+                </div>
+
+                <!-- 操作区 -->
+                <div id="tip-tid" style="text-align:center;color:#999;margin-top:20px">👆 请先选择一个终端</div>
+                
+                <div id="main-area" style="display:none;">
+                    <!-- A. 模拟 -->
+                    <div class="section">
+                        <div class="section-title">🚀 批量模拟</div>
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" id="simName" placeholder="轨迹名称" style="margin:0;">
+                            <button class="btn-green" onclick="runSim()" style="margin:0; white-space:nowrap;">生成20点</button>
+                        </div>
+                    </div>
+
+                    <!-- B. 单点调试 -->
+                    <div class="section" style="background:#fff3cd; border-color:#ffeeba;">
+                        <div class="section-title" style="color:#856404;">📡 单点调试</div>
+                        <input type="text" id="sp_trid" placeholder="轨迹ID (TRID)" style="background:white;">
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" id="sp_loc" value="116.397428,39.90923" placeholder="经纬度">
+                        </div>
+                        <div style="display:flex; gap:5px;">    
+                            <select id="sp_time_mode" style="margin-bottom:6px;">
+                                <option value="now">当前时间</option>
+                                <option value="custom">指定时间</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; gap:5px;">    
+                            <input type="datetime-local" id="sp_time" style="width:160px;">
+                        </div>
+                        <button class="btn-orange" onclick="uploadSingle()">发送单点</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. 查询结果 -->
+        <div class="panel">
+            <div class="head">📊 轨迹查询</div>
+            <div class="body">
+                <div id="query-disabled" style="text-align:center;color:#999;margin-top:50px">👈 请先选择终端</div>
+                
+                <div id="query-area" style="display:none;">
+                    <!-- 查询表单 -->
+                    <div class="section">
+                        <div style="margin-bottom:10px; background:#e2e6ea; padding:5px; border-radius:4px;">
+                            <label style="font-weight:bold; font-size:12px;">🛠️ 数据模式:</label>
+                            <select id="correction_mode" style="margin:0; font-size:12px;">
+                                <option value="corrected">🔵 纠偏后数据 (展示用)</option>
+                                <option value="raw">🔴 原始数据 (调试用)</option>
+                            </select>
+                        </div>
+
+                        <div class="tabs">
+                            <div class="tab active" onclick="swTab('time')">按时间段</div>
+                            <div class="tab" onclick="swTab('id')">按ID</div>
+                        </div>
+
+                        <div id="tab-time" class="tab-content active">
+                            <input type="date" id="q_date">
+                            <button class="btn-blue" onclick="queryTime()">🔍 查询</button>
+                        </div>
+
+
+                        <div id="tab-id" class="tab-content">
+                            <input type="text" id="q_trid" placeholder="输入 TRID">
+                            <button class="btn-blue" onclick="queryId()">🔍 查询</button>
+                        </div>
+                    </div>
+
+                    <!-- 结果列表 -->
+                    <div id="result-box" style="margin-top:10px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. 统一地图 -->
+        <div class="panel">
+            <div class="head">🗺️ 地图可视化</div>
+            <div class="body" style="padding:0; position:relative;">
+                <div id="map-placeholder" style="display:flex; align-items:center; justify-content:center; height:100%; color:#999; flex-direction:column;">
+                    <div style="font-size:48px; margin-bottom:10px;">🗺️</div>
+                    <div>点击左侧轨迹查看地图</div>
+                </div>
+                <div id="main-map-container" style="display:none;"></div>
+                <div id="map-info" class="map-info" style="display:none;">
+                    <h4 id="map-trace-name">轨迹名称</h4>
+                    <p><strong>ID:</strong> <span id="map-trace-id"></span></p>
+                    <p><strong>点数:</strong> <span id="map-trace-points"></span></p>
+                    <p><strong>里程:</strong> <span id="map-trace-distance"></span>m</p>
+                    <div style="margin-top:8px; padding-top:8px; border-top:1px solid #eee;">
+                        <button class="btn-orange" onclick="compareTracksUnified()" style="width:100%; margin-bottom:5px;">⚡ 原始/纠偏对比</button>
+                        <div style="font-size:11px; display:flex; gap:10px; justify-content:center;">
+                            <span style="color:blue">🔵 纠偏</span>
+                            <span style="color:red">🔴 原始</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="padding:0 20px;">
+        <strong>API 日志:</strong> <button onclick="document.getElementById('debug-log').innerText=''" style="width:auto; padding:2px 8px; font-size:12px;">清空</button>
+        <div id="debug-log" class="log-area">等待操作...</div>
+    </div>
+
+    <script>
+        const BASE = "https://tsapi.amap.com/v1/track";
+        let STATE = { key: localStorage.getItem('ak') || document.getElementById('apiKey').value, sid: null, tid: null };
+        if(STATE.key) document.getElementById('apiKey').value = STATE.key;
+
+        const now = new Date();
+        const off = now.getTimezoneOffset() * 60000;
+        const localISO = new Date(now - off).toISOString().slice(0, 16);
+        const yestISO = new Date(now - off - 86400000).toISOString().slice(0, 16);
+        document.getElementById('sp_time').value = localISO;
+        // document.getElementById('q_end').value = localISO;
+        // document.getElementById('q_start').value = yestISO;
+        document.getElementById('q_date').value =
+            new Date(now - off).toISOString().slice(0, 10);
+
+
+        function saveKey() {
+            STATE.key = document.getElementById('apiKey').value;
+            localStorage.setItem('ak', STATE.key);
+            alert("Web服务 Key 保存成功");
+            listServices();
+        }
+
+        function log(msg) {
+            const el = document.getElementById('debug-log');
+            el.innerText = `[${new Date().toLocaleTimeString()}] ${msg}\n\n` + el.innerText;
+        }
+
+        async function api(path, params, method) {
+            if(!STATE.key) return alert("请填Key");
+            let url = `${BASE}${path}?key=${STATE.key}`;
+            if(STATE.sid) params.sid = STATE.sid;
+
+            let opts = { method };
+            if(method === 'GET') {
+                url += `&${new URLSearchParams(params).toString()}`;
+                log(`GET ${url}`);
+            } else {
+                let fd = new URLSearchParams();
+                let debug = {};
+                for(let k in params) {
+                    if(params[k] != null) { fd.append(k, params[k]); debug[k] = params[k]; }
+                }
+                opts.headers = {'Content-Type': 'application/x-www-form-urlencoded'};
+                opts.body = fd;
+                log(`POST ${url}\nBody: ${JSON.stringify(debug)}`);
+            }
+
+            try {
+                let res = await fetch(url, opts);
+                let json = await res.json();
+                if(json.errcode !== 10000) {
+                    log(`❌ API Error: ${JSON.stringify(json)}`);
+                    alert(`报错: ${json.errcode} - ${json.errmsg}`);
+                    return null;
+                }
+                log(`✅ OK: ${JSON.stringify(json)}`);
+                return json.data || true;
+            } catch(e) {
+                log(`❌ Net Error: ${e}`);
+                return null;
+            }
+        }
+
+        async function listServices() {
+            let res = await api('/service/list', {}, 'POST');
+            let box = document.getElementById('list-service'); box.innerHTML = '';
+            if(res && res.results) res.results.forEach(s => {
+                let d = document.createElement('div'); d.className = 'item';
+                d.innerHTML = `<span><b>${s.name}</b> <small>${s.sid}</small></span> <button class="btn-del" onclick="delS(event,'${s.sid}')">删</button>`;
+                d.onclick = () => { STATE.sid = s.sid; STATE.tid=null; hl(d,'list-service'); listTerminals(); toggle(false); };
+                box.appendChild(d);
+            });
+        }
+        async function addService() {
+            let n = prompt("服务名:"); if(n && await api('/service/add', {name:n}, 'POST')) listServices();
+        }
+        async function delS(e,sid) {
+            e.stopPropagation();
+            if(confirm("删服务?") && await api('/service/delete', {sid}, 'POST')) {
+                document.getElementById('list-service').innerHTML = ''; 
+                if(STATE.sid==sid) toggle(false);
+                setTimeout(listServices, 500);
+            }
+        }
+
+        async function listTerminals() {
+            let res = await api('/terminal/list', {page:1}, 'POST');
+            let box = document.getElementById('list-terminal'); box.innerHTML = '';
+            if(res && res.results) res.results.forEach(t => {
+                let d = document.createElement('div'); d.className = 'item';
+                d.innerHTML = `<span><b>${t.name}</b> <small>${t.tid}</small></span> <button class="btn-del" onclick="delT(event,'${t.tid}')">删</button>`;
+                d.onclick = () => { STATE.tid = t.tid; hl(d,'list-terminal'); toggle(true); };
+                box.appendChild(d);
+            });
+        }
+        async function addTerminal() {
+            if(!STATE.sid) return alert("选服务");
+            let n = prompt("终端名:"); if(n && await api('/terminal/add', {sid:STATE.sid, name:n}, 'POST')) listTerminals();
+        }
+        async function delT(e,tid) {
+            e.stopPropagation();
+            if(confirm("删终端?") && await api('/terminal/delete', {sid:STATE.sid, tid}, 'POST')) {
+                document.getElementById('list-terminal').innerHTML = '';
+                if(STATE.tid==tid) toggle(false);
+                setTimeout(listTerminals, 500);
+            }
+        }
+
+        async function runSim() {
+            if(!STATE.tid) return alert("选终端");
+            let t = await api('/trace/add', {tid:STATE.tid, trname: document.getElementById('simName').value}, 'POST');
+            if(!t) return;
+            document.getElementById('sp_trid').value = t.trid; 
+
+            let startLng = 116.397428; let startLat = 39.90923;
+            let pts = []; let now = Date.now();
+            for(let i=0; i<20; i++) pts.push({
+                location: `${(startLng+i*0.0005).toFixed(6)},${(startLat+Math.random()*0.0005).toFixed(6)}`, 
+                locatetime: now+i*2000, speed:30, accuracy:10
+            });
+            if(await api('/point/upload', {tid:STATE.tid, trid:t.trid, points:JSON.stringify(pts)}, 'POST')) {
+                alert(`模拟成功 TRID: ${t.trid}`);
+            }
+        }
+
+        async function uploadSingle() {
+            if (!STATE.tid) return alert("请先选择终端");
+
+            let trid = document.getElementById('sp_trid').value.trim();
+            let loc = document.getElementById('sp_loc').value.trim();
+            let timeStr = document.getElementById('sp_time').value;
+            let timeMode = document.getElementById('sp_time_mode').value;
+
+            if (!loc) {
+                alert("经纬度为空");
+                return;
+            }
+
+            // 1️⃣ 计算 locatetime
+            let locatetime;
+            if (timeMode === 'now') {
+                locatetime = Date.now();                 // 当前时间
+            } else {
+                if (!timeStr) {
+                    alert("请选择指定时间");
+                    return;
+                }
+                locatetime = new Date(timeStr).getTime(); // 指定时间
+                if (isNaN(locatetime)) {
+                    alert("时间格式非法");
+                    return;
+                }
+            }
+
+            // 2️⃣ 如果没填 trid，自动创建“调试轨迹”
+            let autoTrace = false;
+            if (!trid) {
+                let now = new Date();
+                let trname =
+                    `单点调试_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}` +
+                    `_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+
+                let t = await api('/trace/add', {
+                    tid: STATE.tid,
+                    trname: trname
+                }, 'POST');
+
+                if (!t) return;
+
+                trid = t.trid;
+                autoTrace = true;
+                document.getElementById('sp_trid').value = trid;
+            }
+
+            // 3️⃣ 构造单点
+            let pt = [{
+                location: loc,
+                locatetime: locatetime,
+                speed: 0,
+                accuracy: 10
+            }];
+
+            // 4️⃣ 上传单点
+            let ok = await api('/point/upload', {
+                tid: STATE.tid,
+                trid: trid,
+                points: JSON.stringify(pt)
+            }, 'POST');
+
+            
+            alert("单点调试发送成功");
+
+
+        }
+
+
+
+        async function delTrace(trid) {
+            if(confirm("删除轨迹? 删除后无法恢复!") && await api('/trace/delete', {tid:STATE.tid, trid}, 'POST')) {
+                alert("已删除");
+                // 刷新查询结果
+                if(document.getElementById('tab-time').classList.contains('active')) {
+                    queryTime(); 
+                } else {
+                    queryId();
+                }
+                // 清空地图
+                if(mainMap) mainMap.clearMap();
+                document.getElementById('map-info').style.display = 'none';
+                document.getElementById('map-placeholder').style.display = 'flex';
+                document.getElementById('main-map-container').style.display = 'none';
+            }
+        }
+
+        async function queryTime() {
+            let d = document.getElementById('q_date').value;
+            if (!d) {
+                alert("请选择日期");
+                return;
+            }
+
+            // 当天 00:00:00 ～ 23:59:59
+            let starttime = new Date(d + ' 00:00:00').getTime();
+            let endtime   = new Date(d + ' 23:59:59').getTime();
+
+            doQuery({
+                tid: STATE.tid,
+                starttime: starttime,
+                endtime: endtime
+            });
+        }
+
+        async function queryId() {
+            let trid = document.getElementById('q_trid').value;
+            if(trid) doQuery({tid:STATE.tid, trid});
+        }
+
+        async function doQuery(p) {
+            let box = document.getElementById('result-box'); box.innerHTML = '查询中...';
+            let mode = document.getElementById('correction_mode').value;
+            if(mode === 'raw') p.correction = "denoise=0,mapmatch=0";
+            else p.correction = "denoise=1,mapmatch=1";
+            p.ispoints = 0;
+
+            let res = await api('/terminal/trsearch', p, 'GET');
+            box.innerHTML = '';
+            
+            if(res && res.tracks && res.tracks.length) {
+                res.tracks.forEach(t => {
+                    let name = t.trname || `轨迹 ${t.trid}`;
+
+                    box.innerHTML += `
+                    <div class="item"
+                        style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+                        <div style="flex:1;" onclick="loadTraceAndShow('${t.trid}', '${name.replace(/'/g, "\\'")}')">
+                            <div style="font-weight:bold; font-size:13px; color:#333;">
+                                ${name}
+                            </div>
+                            <div style="font-size:11px; color:#999; margin-top:2px;">
+                                ID: ${t.trid}
+                                | 点数: ${t.counts}
+                                | 里程: ${t.distance || 0}m
+                            </div>
+                        </div>
+                        <button class="btn-del" onclick="event.stopPropagation(); delTrace('${t.trid}')">删</button>
+                    </div>`;
+                });
+            } else {
+                box.innerHTML = '<div style="padding:30px; color:#999; text-align:center;">🔭 无数据</div>';
+            }
+        }
+        
+        async function loadTraceAndShow(trid, name) {
+            initMainMap();
+            mainMap.clearMap();
+
+            let mode = document.getElementById('correction_mode').value;
+            
+            // 1️⃣ 先获取原始数据（用于提取时间）
+            let rawParams = {
+                tid: STATE.tid,
+                trid: trid,
+                ispoints: 1,
+                correction: "denoise=0,mapmatch=0"
+            };
+            
+            let rawRes = await api('/terminal/trsearch', rawParams, 'GET');
+            if (!rawRes || !rawRes.tracks || !rawRes.tracks[0]) {
+                alert("未查询到轨迹点");
+                return;
+            }
+            
+            let rawTrack = rawRes.tracks[0];
+            
+            // 2️⃣ 再获取当前模式的数据（用于显示）
+            let params = {
+                tid: STATE.tid,
+                trid: trid,
+                ispoints: 1,
+                correction: mode === 'raw' ? "denoise=0,mapmatch=0" : "denoise=1,mapmatch=1"
+            };
+
+            let res = await api('/terminal/trsearch', params, 'GET');
+            if (!res || !res.tracks || !res.tracks[0]) {
+                alert("未查询到轨迹点");
+                return;
+            }
+
+            let track = res.tracks[0];
+            let points = track.points || [];
+            
+            // 3️⃣ 从原始数据中提取时间信息
+            let startTime = rawTrack.startPoint?.locatetime ? new Date(rawTrack.startPoint.locatetime).toLocaleString('zh-CN', {
+                month: '2-digit', day: '2-digit', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }) : '-';
+            
+            let endTime = rawTrack.endPoint?.locatetime ? new Date(rawTrack.endPoint.locatetime).toLocaleString('zh-CN', {
+                month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit'
+            }) : '-';
+            
+            // 4️⃣ 计算总时长（使用原始数据的时间差）
+            let duration = '-';
+            if(rawTrack.startPoint?.locatetime && rawTrack.endPoint?.locatetime) {
+                let diff = rawTrack.endPoint.locatetime - rawTrack.startPoint.locatetime;
+                let hours = Math.floor(diff / 3600000);
+                let minutes = Math.floor((diff % 3600000) / 60000);
+                let seconds = Math.floor((diff % 60000) / 1000);
+                
+                if(hours > 0) {
+                    duration = `${hours}小时${minutes}分${seconds}秒`;
+                } else if(minutes > 0) {
+                    duration = `${minutes}分${seconds}秒`;
+                } else {
+                    duration = `${seconds}秒`;
+                }
+            }
+
+            document.getElementById('map-info').style.display = 'block';
+            document.getElementById('map-trace-name').innerText = name;
+            document.getElementById('map-trace-id').innerText = trid;
+            document.getElementById('map-trace-points').innerText = points.length;
+            document.getElementById('map-trace-distance').innerText = track.distance || 0;
+            
+            // 5️⃣ 添加时间信息到地图信息窗口
+            let mapInfo = document.getElementById('map-info');
+            let oldTimeInfo = mapInfo.querySelector('.time-info');
+            if(oldTimeInfo) oldTimeInfo.remove();
+            
+            let timeInfoHTML = `
+                <div class="time-info" style="margin-top:8px; padding-top:8px; border-top:1px solid #eee; font-size:11px; color:#555;">
+                    <p style="margin:3px 0;"><strong>🕐 起始:</strong> ${startTime}</p>
+                    <p style="margin:3px 0;"><strong>🕑 结束:</strong> ${endTime}</p>
+                    <p style="margin:3px 0;"><strong>⏱️ 总时长:</strong> ${duration}</p>
+                </div>
+            `;
+            
+            let btnDiv = mapInfo.querySelector('div[style*="margin-top:8px"]');
+            btnDiv.insertAdjacentHTML('beforebegin', timeInfoHTML);
+
+            drawTraceOnMainMap(points, mode === 'raw' ? 'raw' : 'corrected');
+        }
+        let mainMap = null;
+        let currentTrid = null;
+
+        function initMainMap() {
+            if(!mainMap) {
+                mainMap = new AMap.Map('main-map-container', {
+                    zoom: 13,
+                    viewMode: '2D'
+                });
+            }
+            document.getElementById('map-placeholder').style.display = 'none';
+            document.getElementById('main-map-container').style.display = 'block';
+        }
+
+        function showTraceOnMap(traceData) {
+            initMainMap();
+            mainMap.clearMap();
+            
+            const { trid, name, points, distance } = traceData;
+            currentTrid = trid;
+            
+            document.getElementById('map-info').style.display = 'block';
+            document.getElementById('map-trace-name').innerText = name;
+            document.getElementById('map-trace-id').innerText = trid;
+            document.getElementById('map-trace-points').innerText = points.length;
+            document.getElementById('map-trace-distance').innerText = distance || 0;
+            
+            drawTraceOnMainMap(points, 'corrected');
+        }
+
+        function drawTraceOnMainMap(points, type) {
+            if(!points || points.length === 0) return;
+
+            const path = points.map(p => {
+                const parts = p.location.split(',');
+                return new AMap.LngLat(parseFloat(parts[0]), parseFloat(parts[1]));
+            });
+
+            let color = type === 'raw' ? 'red' : '#3366FF';
+            let style = type === 'raw' ? 'dashed' : 'solid';
+            let zIndex = type === 'raw' ? 50 : 49;
+
+            const polyline = new AMap.Polyline({
+                path: path,
+                strokeColor: color, 
+                strokeOpacity: 0.8,
+                strokeWeight: type === 'raw' ? 4 : 6,
+                strokeStyle: style,
+                lineJoin: 'round',
+                zIndex: zIndex,
+                map: mainMap
+            });
+
+            if(type === 'corrected') {
+                new AMap.Marker({ 
+                    position: path[0], 
+                    map: mainMap, 
+                    title: '起点',
+                    label: { content: '起', offset: new AMap.Pixel(0, -30) }
+                });
+                new AMap.Marker({ 
+                    position: path[path.length-1], 
+                    map: mainMap, 
+                    title: '终点',
+                    label: { content: '终', offset: new AMap.Pixel(0, -30) }
+                });
+                mainMap.setFitView([polyline]);
+            }
+        }
+
+        async function compareTracksUnified() {
+            if(!currentTrid) return;
+            
+            if(confirm("将请求原始数据(Raw)并叠加显示,确定?")) {
+                let params = { 
+                    tid: STATE.tid, 
+                    trid: currentTrid, 
+                    correction: "denoise=0,mapmatch=0", 
+                    ispoints: 1 
+                };
+                
+                let res = await api('/terminal/trsearch', params, 'GET');
+                if(res && res.tracks && res.tracks[0]) {
+                    let rawPoints = res.tracks[0].points;
+                    drawTraceOnMainMap(rawPoints, 'raw');
+                    log(`绘制原始轨迹点数: ${rawPoints.length}`);
+                } else {
+                    alert("未找到原始数据");
+                }
+            }
+        }
+
+        function toggleDetail(id) {
+            let el = document.getElementById(id);
+            el.style.display = el.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        function toggle(s) { 
+            document.getElementById('tip-tid').style.display=s?'none':'block'; 
+            document.getElementById('main-area').style.display=s?'block':'none';
+            document.getElementById('query-disabled').style.display=s?'none':'block';
+            document.getElementById('query-area').style.display=s?'block':'none';
+        }
+        
+        function hl(el,id) { 
+            document.querySelectorAll(`#${id} .item`).forEach(e=>e.classList.remove('active')); 
+            el.classList.add('active'); 
+        }
+        
+        function swTab(m) { 
+            document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active')); 
+            document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+            if(m=='time'){
+                document.querySelectorAll('.tab')[0].classList.add('active');
+                document.getElementById('tab-time').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab')[1].classList.add('active');
+                document.getElementById('tab-id').classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>
