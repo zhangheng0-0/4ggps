@@ -232,7 +232,7 @@
                 // 新的数据格式：直接从根对象获取
                 const lng = parseFloat(data.lng);
                 const lat = parseFloat(data.lat);
-                const speed = parseFloat(data.spd) || 0;
+                const speed = (parseFloat(data.spd) || 0) * 1.852;  // 节(knots) 转 km/h
                 const altitude = parseFloat(data.alt) || 0;
                 const isMoving = data.mov || 0;
 
