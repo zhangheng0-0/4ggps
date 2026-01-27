@@ -27,24 +27,23 @@
         .status-on { color: green; font-weight: bold; }
         .status-off { color: red; font-weight: bold; }
         .info-row {
-
             font-size: 15px;
+            margin: 5px 0;
         }
         .info-label {
             color: #666;
             font-weight: 500;
             display: inline-block;
-            width: 80px;
+            width: 50px;
         }
         .info-value {
             color: #333;
             font-weight: bold;
         }
         .speed-display {
-            font-size: 24px;
+            font-size: 32px;
             color: #3366FF;
             font-weight: bold;
-            font-size: 32px;
         }
         .stats {
             margin-top: 10px;
@@ -79,6 +78,31 @@
         }
         .moving { background: #4CAF50; color: white; }
         .stopped { background: #FF9800; color: white; }
+        .btn-gettime {
+            width: 100%;
+            background: #3366FF;
+            color: white;
+            border: none;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-gettime:hover {
+            background: #2255DD;
+        }
+        .btn-gettime:active {
+            background: #1144BB;
+        }
+        .btn-gettime:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+        .time-display {
+            background: #f0f8ff;
+            border-left: 3px solid #3366FF;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -90,7 +114,6 @@
             <span class="info-label">速度:</span>
             <span class="speed-display" id="speed">-- km/h</span>
         </div>
-        
         
         <div class="info-row">
             <span class="info-label">经度:</span>
@@ -111,6 +134,14 @@
             轨迹点数: <span id="point-count">0</span>
         </div>
         
+        <!-- 新增：获取时间按钮 -->
+        <button id="btn-gettime" class="btn-gettime" onclick="getDeviceTime()">获取设备状态</button>
+        
+        <!-- 新增：时间显示区域 -->
+        <div id="time-display" class="time-display" style="display:none;">
+            <div><strong>设备时间:</strong> <span id="device-time">--</span></div>
+            <div><strong>状态:</strong> <span id="gps-status">--</span></div>
+        </div>
     </div>
 
     <div id="container"></div>
@@ -204,58 +235,115 @@
         client.on('message', (topic, message) => {
             try {
                 const data = JSON.parse(message.toString());
+                console.log('收到消息:', data);
                 
-                // 新的数据格式：直接从根对象获取
+                // 检查是否是时间响应数据
+                if (data.timestamp && data.time) {
+                    // 显示时间信息
+                    document.getElementById('device-time').innerText = data.time;
+                    document.getElementById('gps-status').innerText = data.status || '--';
+                    document.getElementById('time-display').style.display = 'block';
+                    
+                    // 如果包含GPS数据，也更新地图
+                    if (data.gps && data.gps.lng && data.gps.lat) {
+                        const lng = parseFloat(data.gps.lng);
+                        const lat = parseFloat(data.gps.lat);
+                        const speed = (parseFloat(data.gps.spd) || 0) * 1.852;
+                        const altitude = parseFloat(data.gps.alt) || 0;
+                        
+                        updateMapWithGPS(lng, lat, speed, altitude);
+                    }
+                    
+                    return;
+                }
+                
+                // 原有的GPS数据处理
                 const lng = parseFloat(data.lng);
                 const lat = parseFloat(data.lat);
                 const speed = (parseFloat(data.spd) || 0) * 1.852;  // 节(knots) 转 km/h
                 const altitude = parseFloat(data.alt) || 0;
                 
-
                 if (isNaN(lng) || isNaN(lat)) return;
-
-                // 坐标转换 (WGS84 转 GCJ02)
-                AMap.convertFrom([lng, lat], 'gps', function (status, result) {
-                    if (result.info === 'ok') {
-                        const lnglat = result.locations[0];
-                        
-                        // 更新UI显示
-                        document.getElementById('speed').innerText = speed.toFixed(1) + ' km/h';
-                        document.getElementById('speed').style.color = getColorBySpeed(speed);
-                        document.getElementById('lng').innerText = lnglat.lng.toFixed(6);
-                        document.getElementById('lat').innerText = lnglat.lat.toFixed(6);
-                        document.getElementById('altitude').innerText = altitude + ' m';
-                        
-                        
-                        // 更新标记位置
-                        marker.setPosition(lnglat);
-                        
-                        // 添加到轨迹数据
-                        pathData.push({
-                            lnglat: lnglat,
-                            speed: speed
-                        });
-                        
-                        // 增量绘制新线段
-                        drawNewSegment({lnglat: lnglat, speed: speed}, pathData.length - 1);
-                        
-                        // 更新点数
-                        document.getElementById('point-count').innerText = pathData.length;
-                        
-                        // 平滑移动中心点
-                        map.setCenter(lnglat);
-                    }
-                });
+                
+                updateMapWithGPS(lng, lat, speed, altitude);
                 
             } catch (err) {
                 console.error('解析数据失败:', err);
             }
         });
 
+        // 更新地图的函数
+        function updateMapWithGPS(lng, lat, speed, altitude) {
+            // 坐标转换 (WGS84 转 GCJ02)
+            AMap.convertFrom([lng, lat], 'gps', function (status, result) {
+                if (result.info === 'ok') {
+                    const lnglat = result.locations[0];
+                    
+                    // 更新UI显示
+                    document.getElementById('speed').innerText = speed.toFixed(1) + ' km/h';
+                    document.getElementById('speed').style.color = getColorBySpeed(speed);
+                    document.getElementById('lng').innerText = lnglat.lng.toFixed(6);
+                    document.getElementById('lat').innerText = lnglat.lat.toFixed(6);
+                    document.getElementById('altitude').innerText = altitude + ' m';
+                    
+                    // 更新标记位置
+                    marker.setPosition(lnglat);
+                    
+                    // 添加到轨迹数据
+                    pathData.push({
+                        lnglat: lnglat,
+                        speed: speed
+                    });
+                    
+                    // 增量绘制新线段
+                    drawNewSegment({lnglat: lnglat, speed: speed}, pathData.length - 1);
+                    
+                    // 更新点数
+                    document.getElementById('point-count').innerText = pathData.length;
+                    
+                    // 平滑移动中心点
+                    map.setCenter(lnglat);
+                }
+            });
+        }
+
         client.on('error', (err) => {
             document.getElementById('conn-status').innerText = '连接错误';
             document.getElementById('conn-status').className = 'status-off';
         });
+
+        // 5. 获取设备时间的函数
+        function getDeviceTime() {
+            if (!client.connected) {
+                alert('MQTT未连接，无法发送命令');
+                return;
+            }
+            
+            const button = document.getElementById('btn-gettime');
+            button.disabled = true;
+            button.innerText = '请求中...';
+            
+            // 发送getTime命令到R订阅主题
+            const cmd = {
+                cmd: "getTime",
+                msgid: Date.now().toString()
+            };
+            
+            client.publish('R', JSON.stringify(cmd), { qos: 0 }, (err) => {
+                if (err) {
+                    console.error('发送命令失败:', err);
+                    alert('发送命令失败');
+                } else {
+                    console.log('已发送getTime命令:', cmd);
+                }
+                
+                // 2秒后恢复按钮
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.innerText = '重新获取设备状态';
+                }, 2000);
+            });
+        }
     </script>
 </body>
 </html>
