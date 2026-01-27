@@ -10,7 +10,7 @@
     </script>
     <script src="https://webapi.amap.com/maps?v=2.0&key=35450666bb081d2f71e0719cce61d27f"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
         #container { width: 100%; height: 100%; }
@@ -25,6 +25,7 @@
             z-index: 100;
             font-family: sans-serif;
             min-width: 200px;
+            font-size: 16px;
         }
         .status-on { color: green; font-weight: bold; }
         .status-off { color: red; font-weight: bold; }
@@ -32,7 +33,7 @@
             margin: 8px 0;
             padding: 5px 0;
             border-bottom: 1px solid #eee;
-            font-size: 13px;
+            font-size: 15px;
         }
         .info-label {
             color: #666;
@@ -48,6 +49,7 @@
             font-size: 24px;
             color: #3366FF;
             font-weight: bold;
+            font-size: 32px;
         }
         .stats {
             margin-top: 10px;
@@ -94,10 +96,6 @@
             <span class="speed-display" id="speed">-- km/h</span>
         </div>
         
-        <div class="info-row">
-            <span class="info-label">运动状态:</span>
-            <span class="moving-badge stopped" id="moving-status">静止</span>
-        </div>
         
         <div class="info-row">
             <span class="info-label">经度:</span>
@@ -234,7 +232,7 @@
                 const lat = parseFloat(data.lat);
                 const speed = (parseFloat(data.spd) || 0) * 1.852;  // 节(knots) 转 km/h
                 const altitude = parseFloat(data.alt) || 0;
-                const isMoving = data.mov || 0;
+                
 
                 if (isNaN(lng) || isNaN(lat)) return;
 
@@ -250,15 +248,6 @@
                         document.getElementById('lat').innerText = lnglat.lat.toFixed(6);
                         document.getElementById('altitude').innerText = altitude + ' m';
                         
-                        // 更新运动状态显示
-                        const movingStatus = document.getElementById('moving-status');
-                        if (isMoving === 1) {
-                            movingStatus.innerText = '移动中';
-                            movingStatus.className = 'moving-badge moving';
-                        } else {
-                            movingStatus.innerText = '静止';
-                            movingStatus.className = 'moving-badge stopped';
-                        }
                         
                         // 更新标记位置
                         marker.setPosition(lnglat);
