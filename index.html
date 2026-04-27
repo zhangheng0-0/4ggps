@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>GPS实时监控 - 轨迹版</title>
+    <title>GPS实时监控 - 专家控制版</title>
     <script type="text/javascript">
         window._AMapSecurityConfig = { 
             securityJsCode: 'fcada99047bf6ebd49ca6d8ca81c91c6' 
@@ -12,336 +12,181 @@
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; }
-        #container { width: 100%; height: 100%; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; }
+        #container { width: 100%; height: 100%; z-index: 1; }
+        
+        /* 侧边信息卡片 */
         .info-card {
             position: absolute;
+            top: 10px; left: 10px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             z-index: 100;
-            font-family: sans-serif;
-            min-width: 200px;
-            font-size: 16px;
+            padding: 15px;
+            width: 260px;
         }
+        
+        /* 底部控制面板 */
+        .control-panel {
+            position: absolute;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 -2px 15px rgba(0,0,0,0.2);
+            z-index: 100;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            width: 90%;
+            max-width: 600px;
+        }
+
         .status-on { color: green; font-weight: bold; }
         .status-off { color: red; font-weight: bold; }
-        .info-row {
-            font-size: 15px;
-            margin: 5px 0;
-        }
-        .info-label {
-            color: #666;
-            font-weight: 500;
-            display: inline-block;
-            width: 50px;
-        }
-        .info-value {
-            color: #333;
-            font-weight: bold;
-        }
-        .speed-display {
-            font-size: 32px;
-            color: #3366FF;
-            font-weight: bold;
-        }
-        .stats {
-            margin-top: 10px;
-            font-size: 12px;
-            border-top: 2px solid #ddd;
-            padding-top: 10px;
-        }
-        .legend {
-            margin-top: 1px;
-            padding: 1px;
-            background: #f5f5f5;
-            border-radius: 1px;
-            font-size: 11px;
-        }
-        .legend-item {
-            display: inline-block;
-            margin-right: 10px;
-        }
-        .legend-color {
-            display: inline-block;
-            width: 20px;
-            height: 3px;
-            vertical-align: middle;
-            margin-right: 3px;
-        }
-        .moving-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 11px;
-            font-weight: bold;
-        }
-        .moving { background: #4CAF50; color: white; }
-        .stopped { background: #FF9800; color: white; }
-        .btn-gettime {
-            width: 100%;
+        .info-row { margin: 5px 0; font-size: 14px; }
+        .speed-display { font-size: 24px; color: #3366FF; font-weight: bold; }
+        
+        /* 按钮样式 */
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
             background: #3366FF;
             color: white;
-            border: none;
-            font-size: 14px;
-            font-weight: bold;
             cursor: pointer;
-            transition: background 0.3s;
+            font-size: 12px;
         }
-        .btn-gettime:hover {
-            background: #2255DD;
-        }
-        .btn-gettime:active {
-            background: #1144BB;
-        }
-        .btn-gettime:disabled {
-            background: #999;
-            cursor: not-allowed;
-        }
-        .time-display {
-            background: #f0f8ff;
-            border-left: 3px solid #3366FF;
-            font-size: 13px;
+        button:hover { background: #2255DD; }
+        button.danger { background: #FF4444; }
+        
+        .input-group { display: flex; gap: 5px; align-items: center; }
+        input { width: 60px; padding: 5px; border: 1px solid #ccc; }
+        
+        #log-area {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+            max-height: 60px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
         }
     </style>
 </head>
 <body>
 
     <div class="info-card">
-        <div style="margin-top:0;">设备状态: <span id="conn-status" class="status-off">未连接</span></div>
-        
-        <div class="info-row">
-            <span class="info-label">速度:</span>
-            <span class="speed-display" id="speed">-- km/h</span>
+        <div style="font-weight:bold; margin-bottom:10px;">连接: <span id="conn-status" class="status-off">未连接</span></div>
+        <div class="info-row">速度: <span class="speed-display" id="speed">-- km/h</span></div>
+        <div class="info-row">位置: <span id="lng">--</span>, <span id="lat">--</span></div>
+        <div class="info-row">信号强度: <span id="csq-val" style="font-weight:bold;">--</span></div>
+        <div class="info-row">卫星状态: <span id="sat-val">--</span></div>
+        <div id="log-area">等待指令响应...</div>
+    </div>
+
+    <div class="control-panel">
+        <div class="input-group">
+            <input type="number" id="interval-input" placeholder="秒" value="60">
+            <button onclick="sendCommand('set_gps_interval', document.getElementById('interval-input').value)">设置频率</button>
         </div>
-        
-        <div class="info-row">
-            <span class="info-label">经度:</span>
-            <span class="info-value" id="lng">--</span>
-        </div>
-        
-        <div class="info-row">
-            <span class="info-label">纬度:</span>
-            <span class="info-value" id="lat">--</span>
-        </div>
-        
-        <div class="info-row">
-            <span class="info-label">高度:</span>
-            <span class="info-value" id="altitude">--</span>
-        </div>
-        
-        <div class="stats">
-            轨迹点数: <span id="point-count">0</span>
-        </div>
-        
-        <!-- 新增：获取时间按钮 -->
-        <button id="btn-gettime" class="btn-gettime" onclick="getDeviceTime()">获取设备状态</button>
-        
-        <!-- 新增：时间显示区域 -->
-        <div id="time-display" class="time-display" style="display:none;">
-            <div><strong>设备时间:</strong> <span id="device-time">--</span></div>
-            <div><strong>状态:</strong> <span id="gps-status">--</span></div>
-        </div>
+        <button onclick="sendCommand('get_gps_status')">查卫星状态</button>
+        <button onclick="sendCommand('get_csq')">查4G信号</button>
+        <button onclick="sendCommand('get_imei')">查IMEI</button>
+        <button onclick="sendCommand('get_gps')">手动刷新GPS</button>
+        <button class="danger" onclick="if(confirm('确定重启设备？')) sendCommand('reboot')">远程重启</button>
     </div>
 
     <div id="container"></div>
 
     <script>
-        // 1. 初始化地图
-        const map = new AMap.Map('container', {
-            zoom: 16,
-            center: [113.222351, 33.774272]
-        });
-
-        // 2. 初始化标记(小车)
-        const marker = new AMap.Marker({
-            map: map,
-            icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png',
-            offset: new AMap.Pixel(-13, -30)
-        });
-
-        // 3. 存储轨迹点和速度信息
+        // 1. 地图初始化
+        const map = new AMap.Map('container', { zoom: 16, center: [113.222351, 33.774272] });
+        const marker = new AMap.Marker({ map: map, icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png' });
         let pathData = [];
-        let polylines = [];
-        let textMarkers = [];
 
-        // 根据速度返回颜色
-        function getColorBySpeed(speed) {
-            if (speed < 15) return '#00FF00';
-            if (speed < 30) return '#FFD700';
-            if (speed < 45) return '#FF6600';
-            return '#FF0000';
-        }
-
-        // 增量绘制新的轨迹线段
-        function drawNewSegment(newPoint, index) {
-            if (index > 0) {
-                const prevPoint = pathData[index - 1];
-                const avgSpeed = (prevPoint.speed + newPoint.speed) / 2;
-                
-                const polyline = new AMap.Polyline({
-                    map: map,
-                    path: [prevPoint.lnglat, newPoint.lnglat],
-                    strokeColor: getColorBySpeed(avgSpeed),
-                    strokeOpacity: 0.8,
-                    strokeWeight: 6,
-                    strokeStyle: "solid",
-                });
-                
-                polylines.push(polyline);
-            }
-
-            const displayInterval = 5;
-            if (index % displayInterval === 0 || index === pathData.length - 1) {
-                const text = new AMap.Text({
-                    text: newPoint.speed.toFixed(0),
-                    position: newPoint.lnglat,
-                    offset: new AMap.Pixel(0, -10),
-                    style: {
-                        'background-color': getColorBySpeed(newPoint.speed),
-                        'border': '1px solid #fff',
-                        'border-radius': '1px',
-                        'color': 'rgb(0, 0, 0);',
-                        'font-size': '16px',
-                        'font-weight': 'bold',
-                        'padding': '1px 1px',
-                        'box-shadow': '0 1px 1px rgba(0,0,0,0.3)'
-                    }
-                });
-                
-                text.setMap(map);
-                textMarkers.push(text);
-            }
-        }
-
-        // 4. MQTT 连接配置
+        // 2. MQTT 配置
         const url = 'wss://i0139f01.ala.cn-hangzhou.emqxsl.cn:8084/mqtt';
         const options = {
             clientId: 'web_monitor_' + Math.random().toString(16).slice(2, 10),
-            username: 'zxc',
-            password: '123456',
-            clean: true
+            username: 'zxc', password: '123456', clean: true
         };
-
         const client = mqtt.connect(url, options);
 
         client.on('connect', () => {
-            document.getElementById('conn-status').innerText = '已连接云端';
+            document.getElementById('conn-status').innerText = '已连接';
             document.getElementById('conn-status').className = 'status-on';
-            client.subscribe('T', { qos: 0 });
-            console.log('已订阅主题: T');
+            client.subscribe('T'); // 订阅设备上报的主题
         });
 
+        // 3. 处理设备回传数据
         client.on('message', (topic, message) => {
             try {
                 const data = JSON.parse(message.toString());
-                console.log('收到消息:', data);
+                const log = document.getElementById('log-area');
                 
-                // 检查是否是时间响应数据
-                if (data.timestamp && data.time) {
-                    // 显示时间信息
-                    document.getElementById('device-time').innerText = data.time;
-                    document.getElementById('gps-status').innerText = data.status || '--';
-                    document.getElementById('time-display').style.display = 'block';
+                // 处理各种响应命令
+                if (data.cmd === "get_gps_status_bck") {
+                    let p = data.param;
+                    let usedCount = 0;
                     
-                    // 如果包含GPS数据，也更新地图
-                    if (data.gps && data.gps.lng && data.gps.lat) {
-                        const lng = parseFloat(data.gps.lng);
-                        const lat = parseFloat(data.gps.lat);
-                        const speed = (parseFloat(data.gps.spd) || 0) * 1.852;
-                        const altitude = parseFloat(data.gps.alt) || 0;
-                        
-                        updateMapWithGPS(lng, lat, speed, altitude);
+                    // 提取参与定位的卫星数
+                    if (typeof p.used === 'object') {
+                        usedCount = p.used.total_sats || 0;
+                    } else {
+                        usedCount = p.used || 0;
                     }
-                    
-                    return;
+
+                    // 修正“可见：--”的问题
+                    // 如果 viewed 不存在，我们就用 usedCount 代替它，因为能定位 26 颗，可见至少也是 26 颗
+                    let viewedCount = p.viewed || usedCount; 
+                    let hdopVal = p.hdop || "--";
+
+                    document.getElementById('sat-val').innerText = 
+                        `可见:${viewedCount} 参与定位:${usedCount} 精度:${hdopVal}`;
                 }
-                
-                // 原有的GPS数据处理
-                const lng = parseFloat(data.lng);
-                const lat = parseFloat(data.lat);
-                const speed = (parseFloat(data.spd) || 0) * 1.852;  // 节(knots) 转 km/h
-                const altitude = parseFloat(data.alt) || 0;
-                
-                if (isNaN(lng) || isNaN(lat)) return;
-                
-                updateMapWithGPS(lng, lat, speed, altitude);
-                
-            } catch (err) {
-                console.error('解析数据失败:', err);
-            }
+                else if (data.cmd === "get_csq_bck") {
+                    document.getElementById('csq-val').innerText = `${data.param.csq} (RSSI:${data.param.rssi})`;
+                    log.innerText = "信号强度查询成功";
+                }
+                else if (data.cmd === "set_gps_interval_bck") {
+                    log.innerText = "上报间隔修改成功: " + data.msg;
+                }
+                else if (data.cmd === "get_imei_bck") {
+                    alert("设备IMEI: " + data.param.imei);
+                }
+                // 处理 GPS 数据（自动上报 或 get_gps 回复）
+                else if (data.lat || (data.param && data.param.lat)) {
+                    const gps = data.param ? data.param : data;
+                    updateMap(parseFloat(gps.lng), parseFloat(gps.lat), parseFloat(gps.spd), parseFloat(gps.alt));
+                }
+            } catch (e) { console.error("解析错误", e); }
         });
 
-        // 更新地图的函数
-        function updateMapWithGPS(lng, lat, speed, altitude) {
-            // 坐标转换 (WGS84 转 GCJ02)
-            AMap.convertFrom([lng, lat], 'gps', function (status, result) {
-                if (result.info === 'ok') {
-                    const lnglat = result.locations[0];
-                    
-                    // 更新UI显示
-                    document.getElementById('speed').innerText = speed.toFixed(1) + ' km/h';
-                    document.getElementById('speed').style.color = getColorBySpeed(speed);
-                    document.getElementById('lng').innerText = lnglat.lng.toFixed(6);
-                    document.getElementById('lat').innerText = lnglat.lat.toFixed(6);
-                    document.getElementById('altitude').innerText = altitude + ' m';
-                    
-                    // 更新标记位置
-                    marker.setPosition(lnglat);
-                    
-                    // 添加到轨迹数据
-                    pathData.push({
-                        lnglat: lnglat,
-                        speed: speed
-                    });
-                    
-                    // 增量绘制新线段
-                    drawNewSegment({lnglat: lnglat, speed: speed}, pathData.length - 1);
-                    
-                    // 更新点数
-                    document.getElementById('point-count').innerText = pathData.length;
-                    
-                    // 平滑移动中心点
-                    map.setCenter(lnglat);
-                }
-            });
+        // 4. 发送指令函数
+        function sendCommand(cmdName, val) {
+            if (!client.connected) return alert("未连接到云端");
+            const payload = { cmd: cmdName };
+            if (val) payload.data = val;
+            
+            client.publish('R', JSON.stringify(payload)); // 发送到设备订阅的主题 R
+            document.getElementById('log-area').innerText = "已发送: " + cmdName;
         }
 
-        client.on('error', (err) => {
-            document.getElementById('conn-status').innerText = '连接错误';
-            document.getElementById('conn-status').className = 'status-off';
-        });
-
-        // 5. 获取设备时间的函数
-        function getDeviceTime() {
-            if (!client.connected) {
-                alert('MQTT未连接，无法发送命令');
-                return;
-            }
-            
-            const button = document.getElementById('btn-gettime');
-            button.disabled = true;
-            button.innerText = '请求中...';
-            
-            // 发送getTime命令到R订阅主题
-            const cmd = {
-                cmd: "getTime",
-                msgid: Date.now().toString()
-            };
-            
-            client.publish('R', JSON.stringify(cmd), { qos: 0 }, (err) => {
-                if (err) {
-                    console.error('发送命令失败:', err);
-                    alert('发送命令失败');
-                } else {
-                    console.log('已发送getTime命令:', cmd);
+        // 5. 地图更新逻辑
+        function updateMap(lng, lat, spd, alt) {
+            if (!lng || !lat) return;
+            AMap.convertFrom([lng, lat], 'gps', function (status, result) {
+                if (result.info === 'ok') {
+                    const pos = result.locations[0];
+                    marker.setPosition(pos);
+                    map.setCenter(pos);
+                    document.getElementById('lng').innerText = lng.toFixed(5);
+                    document.getElementById('lat').innerText = lat.toFixed(5);
+                    document.getElementById('speed').innerText = (spd || 0).toFixed(1) + ' km/h';
                 }
-                
-                // 2秒后恢复按钮
-                setTimeout(() => {
-                    button.disabled = false;
-                    button.innerText = '重新获取设备状态';
-                }, 2000);
             });
         }
     </script>
