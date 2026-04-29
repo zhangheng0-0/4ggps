@@ -905,6 +905,60 @@ const marker = new AMap.Marker({
     icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png'
 });
 
+// ====== GPS 轨迹绘制（速度显示 + 连线 + 每隔若干点标注速度）======
+let pathData = [];
+let polylines = [];
+let textMarkers = [];
+
+// 根据速度返回颜色（与原版轨迹页面保持一致）
+function getColorBySpeed(speed) {
+    if (speed < 15) return '#00FF00';
+    if (speed < 30) return '#FFD700';
+    if (speed < 45) return '#FF6600';
+    return '#FF0000';
+}
+
+// 增量绘制新线段 + 速度文字标注
+function drawNewSegment(newPoint, index) {
+    if (index > 0) {
+        const prevPoint = pathData[index - 1];
+        const avgSpeed = (prevPoint.speed + newPoint.speed) / 2;
+
+        const polyline = new AMap.Polyline({
+            map: map,
+            path: [prevPoint.lnglat, newPoint.lnglat],
+            strokeColor: getColorBySpeed(avgSpeed),
+            strokeOpacity: 0.8,
+            strokeWeight: 6,
+            strokeStyle: "solid",
+        });
+        polylines.push(polyline);
+    }
+
+    // 每隔若干点展示速度数字
+    const displayInterval = 5;
+    if (index % displayInterval === 0 || index === pathData.length - 1) {
+        const text = new AMap.Text({
+            text: newPoint.speed.toFixed(0),
+            position: newPoint.lnglat,
+            offset: new AMap.Pixel(0, -10),
+            style: {
+                'background-color': getColorBySpeed(newPoint.speed),
+                'border': '1px solid #fff',
+                'border-radius': '4px',
+                // 文字颜色设为黑色，保证与背景色可区分
+                'color': 'rgb(0, 0, 0);',
+                'font-size': '16px',
+                'font-weight': 'bold',
+                'padding': '1px 1px',
+                'box-shadow': '0 1px 1px rgba(0,0,0,0.3)'
+            }
+        });
+        text.setMap(map);
+        textMarkers.push(text);
+    }
+}
+
 function updateMap(lng, lat, spd, alt) {
     if (!lng || !lat) return;
     AMap.convertFrom([lng, lat], 'gps', function(status, result) {
@@ -912,9 +966,20 @@ function updateMap(lng, lat, spd, alt) {
             const pos = result.locations[0];
             marker.setPosition(pos);
             map.setCenter(pos);
+
+            const speed = (spd || 0);
+
+            // 更新 UI 显示
             document.getElementById('lng').innerText   = lng.toFixed(5);
             document.getElementById('lat').innerText   = lat.toFixed(5);
-            document.getElementById('speed').innerText = (spd || 0).toFixed(1) + ' km/h';
+            const speedEl = document.getElementById('speed');
+            speedEl.innerText = speed.toFixed(1) + ' km/h';
+            // 速度颜色按档位变化（只影响速度显示，不影响其它区域）
+            speedEl.style.color = getColorBySpeed(speed);
+
+            // 添加轨迹点并增量绘制
+            pathData.push({ lnglat: pos, speed: speed });
+            drawNewSegment({ lnglat: pos, speed: speed }, pathData.length - 1);
         }
     });
 }
