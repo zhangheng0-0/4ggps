@@ -4,82 +4,333 @@
     <meta charset="utf-8">
     <title>GPS实时监控 - 专家控制版</title>
     <script type="text/javascript">
-        window._AMapSecurityConfig = { 
-            securityJsCode: 'fcada99047bf6ebd49ca6d8ca81c91c6' 
+        window._AMapSecurityConfig = {
+            securityJsCode: 'fcada99047bf6ebd49ca6d8ca81c91c6'
         };
     </script>
     <script src="https://webapi.amap.com/maps?v=2.0&key=35450666bb081d2f71e0719cce61d27f"></script>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: sans-serif; }
-        #container { width: 100%; height: 100%; z-index: 1; }
-        
-        /* 侧边信息卡片 */
-        .info-card {
-            position: absolute;
-            top: 10px; left: 10px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            z-index: 100;
-            padding: 15px;
-            width: 260px;
-        }
-        
-        /* 底部控制面板 */
-        .control-panel {
-            position: absolute;
-            bottom: 20px; left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 -2px 15px rgba(0,0,0,0.2);
-            z-index: 100;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            width: 90%;
-            max-width: 600px;
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+SC:wght@300;400;700&display=swap');
+
+        :root {
+            --bg:      #0a0e13;
+            --card:    #111820;
+            --border:  #1e2d3d;
+            --accent:  #00d4ff;
+            --green:   #00ff9d;
+            --warn:    #ff4757;
+            --yellow:  #ffa502;
+            --muted:   #4a6280;
+            --text:    #cdd9e5;
+            --text2:   #7a90a8;
+            --mono:    'Share Tech Mono', monospace;
+            --sans:    'Noto Sans SC', sans-serif;
         }
 
-        .status-on { color: green; font-weight: bold; }
-        .status-off { color: red; font-weight: bold; }
-        .info-row { margin: 5px 0; font-size: 14px; }
-        .speed-display { font-size: 24px; color: #3366FF; font-weight: bold; }
-        
-        /* 按钮样式 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%; height: 100%;
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        /* ══ TAB BAR ══ */
+        #tab-bar {
+            position: absolute; top: 0; left: 0; right: 0;
+            height: 46px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: stretch;
+            z-index: 300;
+        }
+        .tab-btn {
+            flex: 1; background: none; border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--muted); font-family: var(--sans);
+            font-size: 13px; cursor: pointer;
+            transition: color .2s, border-color .2s;
+            letter-spacing: .3px;
+        }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-btn:hover:not(.active) { color: var(--text); }
+
+        /* ══ PAGES ══ */
+        .page {
+            position: absolute; top: 46px; left: 0; right: 0; bottom: 0;
+            display: none;
+        }
+        .page.active { display: block; }
+
+        /* ════════════════════════════════════
+           PAGE 1 : GPS  原始功能完整保留
+        ════════════════════════════════════ */
+        #container { width: 100%; height: 100%; z-index: 1; }
+
+        .info-card {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(17,24,32,0.96);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            z-index: 100; padding: 15px; width: 260px;
+        }
+        .control-panel {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(17,24,32,0.96);
+            border: 1px solid var(--border);
+            padding: 15px; border-radius: 12px;
+            box-shadow: 0 -2px 15px rgba(0,0,0,0.4);
+            z-index: 100; display: flex; flex-wrap: wrap;
+            gap: 10px; width: 90%; max-width: 600px;
+        }
+        .status-on  { color: #00ff9d; font-weight: bold; }
+        .status-off { color: #ff4757; font-weight: bold; }
+        .info-row   { margin: 5px 0; font-size: 14px; }
+        .speed-display {
+            font-size: 24px; color: var(--accent);
+            font-weight: bold; font-family: var(--mono);
+        }
+
+        /* 通用按钮 */
         button {
             padding: 8px 12px;
-            border: none;
+            border: 1px solid var(--border);
             border-radius: 4px;
-            background: #3366FF;
-            color: white;
+            background: #161f2a;
+            color: var(--text);
             cursor: pointer;
             font-size: 12px;
+            font-family: var(--sans);
+            transition: background .15s, border-color .15s;
         }
-        button:hover { background: #2255DD; }
-        button.danger { background: #FF4444; }
-        
+        button:hover  { background: #1e2d3d; border-color: var(--accent); }
+        button.danger { border-color: var(--warn); color: var(--warn); }
+        button.danger:hover { background: rgba(255,71,87,.15); }
+        button:disabled { opacity: .4; cursor: not-allowed; }
+
         .input-group { display: flex; gap: 5px; align-items: center; }
-        input { width: 60px; padding: 5px; border: 1px solid #ccc; }
-        
-        #log-area {
-            margin-top: 10px;
-            font-size: 12px;
-            color: #666;
-            max-height: 60px;
-            overflow-y: auto;
-            border-top: 1px solid #eee;
-            padding-top: 5px;
+        input[type=number] {
+            width: 70px; padding: 7px;
+            border: 1px solid var(--border); border-radius: 4px;
+            background: #0a0e13; color: var(--text); font-size: 12px;
         }
+        #log-area {
+            margin-top: 10px; font-size: 12px; color: var(--muted);
+            max-height: 60px; overflow-y: auto;
+            border-top: 1px solid var(--border); padding-top: 5px;
+            font-family: var(--mono);
+        }
+
+        /* ════════════════════════════════════
+           PAGE 2 : BMS
+        ════════════════════════════════════ */
+        #page-bms {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px;
+            background: var(--bg);
+        }
+
+        .bms-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "status  control"
+                "cells   cells";
+            gap: 12px;
+            max-width: 960px;
+            margin: 0 auto;
+            padding-bottom: 16px;
+        }
+        @media (max-width: 600px) {
+            .bms-layout {
+                grid-template-columns: 1fr;
+                grid-template-areas:
+                    "status"
+                    "control"
+                    "cells";
+            }
+        }
+
+        /* BMS 面板容器 */
+        .bms-panel {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .bms-panel.area-status  { grid-area: status; }
+        .bms-panel.area-control { grid-area: control; }
+        .bms-panel.area-cells   { grid-area: cells; }
+
+        /* 面板标题栏 */
+        .panel-header {
+            display: flex; align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: #0d1520;
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 10;
+        }
+        .panel-title {
+            font-size: 12px; font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .panel-meta {
+            font-size: 11px; color: var(--muted);
+            font-family: var(--mono); margin-right: 6px;
+        }
+        .refresh-btn {
+            padding: 5px 12px; font-size: 11px; border-radius: 4px;
+            background: var(--accent); color: #000;
+            border: none; font-weight: 700; cursor: pointer;
+            transition: opacity .15s;
+        }
+        .refresh-btn:hover   { opacity: .85; }
+        .refresh-btn:disabled{ opacity: .4; cursor: not-allowed; }
+
+        /* 数据行 */
+        .panel-body { padding: 8px 14px; }
+        .data-row {
+            display: flex; justify-content: space-between;
+            align-items: center; padding: 6px 0;
+            border-bottom: 1px solid rgba(30,45,61,.5);
+            font-size: 13px;
+            gap: 8px;
+        }
+        .data-row:last-child { border-bottom: none; }
+        .data-label { color: var(--text2); white-space: nowrap; }
+        .data-value { font-family: var(--mono); color: var(--text); text-align: right; }
+        .data-value.good   { color: var(--green); }
+        .data-value.warn   { color: var(--yellow); }
+        .data-value.bad    { color: var(--warn); }
+
+        /* 分组小标题 */
+        .group-title {
+            font-size: 11px; color: var(--muted);
+            padding: 8px 14px 2px;
+            text-transform: uppercase; letter-spacing: 1px;
+            border-top: 1px solid var(--border);
+            margin-top: 4px;
+        }
+        .group-title:first-child { border-top: none; margin-top: 0; }
+
+        /* 控制开关 */
+        .switch-row {
+            display: flex; align-items: center;
+            justify-content: space-between;
+            padding: 9px 0;
+            border-bottom: 1px solid rgba(30,45,61,.5);
+            font-size: 13px; gap: 8px;
+        }
+        .switch-row:last-child { border-bottom: none; }
+        .switch-label { color: var(--text2); white-space: nowrap; }
+        .switch-right { display: flex; align-items: center; gap: 6px; }
+        .sw-state {
+            font-family: var(--mono); font-size: 12px;
+            padding: 2px 8px; border-radius: 3px;
+            min-width: 28px; text-align: center;
+            background: #0a0e13;
+        }
+        .sw-state.on  { color: var(--green); }
+        .sw-state.off { color: var(--warn); }
+        .sw-btn-on {
+            padding: 5px 10px; font-size: 12px; border-radius: 4px;
+            background: var(--green); color: #000; border: none;
+            font-weight: 700; cursor: pointer; transition: opacity .15s;
+        }
+        .sw-btn-off {
+            padding: 5px 10px; font-size: 12px; border-radius: 4px;
+            background: #161f2a; color: var(--warn);
+            border: 1px solid var(--warn);
+            font-weight: 700; cursor: pointer; transition: background .15s;
+        }
+        .sw-btn-on:hover  { opacity: .8; }
+        .sw-btn-off:hover { background: rgba(255,71,87,.15); }
+
+        /* 单体电压网格 */
+        .cell-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 6px;
+            padding: 12px 14px;
+        }
+        @media (max-width: 600px) {
+            .cell-grid { grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 10px; }
+        }
+        .cell-item {
+            background: #0d1520;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 7px 4px;
+            text-align: center;
+            transition: border-color .3s;
+        }
+        .cell-num { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+        .cell-val { font-family: var(--mono); font-size: 13px; color: var(--text); }
+        .cell-item.cell-high { border-color: var(--warn);   background: rgba(255,71,87,.08); }
+        .cell-item.cell-high .cell-val { color: var(--warn); }
+        .cell-item.cell-low  { border-color: var(--yellow); background: rgba(255,165,2,.08); }
+        .cell-item.cell-low  .cell-val { color: var(--yellow); }
+        .cell-item.cell-ok   { border-color: #1a3a28; }
+        .cell-item.cell-ok   .cell-val { color: var(--green); }
+
+        /* 报警位 */
+        .alarm-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 3px;
+            padding: 8px 14px 12px;
+        }
+        @media (max-width: 420px) {
+            .alarm-grid { grid-template-columns: 1fr; }
+        }
+        .alarm-item {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 12px; padding: 3px 0; color: var(--muted);
+        }
+        .alarm-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #1e2d3d; flex-shrink: 0; transition: background .3s;
+        }
+        .alarm-item.fault .alarm-dot {
+            background: var(--warn);
+            box-shadow: 0 0 5px var(--warn);
+        }
+        .alarm-item.fault { color: var(--warn); }
+
+        /* 空状态/加载 */
+        .panel-empty {
+            text-align: center; padding: 24px 14px;
+            color: var(--muted); font-size: 13px;
+            font-family: var(--mono);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { display: inline-block; animation: spin .8s linear infinite; }
     </style>
 </head>
 <body>
 
+<!-- ══ TAB BAR ══ -->
+<div id="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('gps', this)">📡 GPS监控</button>
+    <button class="tab-btn"        onclick="switchTab('bms', this)">🔋 BMS电池</button>
+</div>
+
+<!-- ════════════════════ PAGE 1: GPS ════════════════════ -->
+<div class="page active" id="page-gps">
+
     <div class="info-card">
-        <div style="font-weight:bold; margin-bottom:10px;">连接: <span id="conn-status" class="status-off">未连接</span></div>
+        <div style="font-weight:bold; margin-bottom:10px;">
+            连接: <span id="conn-status" class="status-off">未连接</span>
+        </div>
         <div class="info-row">速度: <span class="speed-display" id="speed">-- km/h</span></div>
         <div class="info-row">位置: <span id="lng">--</span>, <span id="lat">--</span></div>
         <div class="info-row">信号强度: <span id="csq-val" style="font-weight:bold;">--</span></div>
@@ -100,95 +351,573 @@
     </div>
 
     <div id="container"></div>
+</div>
 
-    <script>
-        // 1. 地图初始化
-        const map = new AMap.Map('container', { zoom: 16, center: [113.222351, 33.774272] });
-        const marker = new AMap.Marker({ map: map, icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png' });
-        let pathData = [];
+<!-- ════════════════════ PAGE 2: BMS ════════════════════ -->
+<div class="page" id="page-bms">
+    <div class="bms-layout">
 
-        // 2. MQTT 配置
-        const url = 'wss://i0139f01.ala.cn-hangzhou.emqxsl.cn:8084/mqtt';
-        const options = {
-            clientId: 'web_monitor_' + Math.random().toString(16).slice(2, 10),
-            username: 'zxc', password: '123456', clean: true
-        };
-        const client = mqtt.connect(url, options);
+        <!-- 区域1：状态数据 -->
+        <div class="bms-panel area-status">
+            <div class="panel-header">
+                <span class="panel-title">⚡ 状态数据</span>
+                <div style="display:flex;align-items:center;">
+                    <span class="panel-meta" id="status-time">--</span>
+                    <button class="refresh-btn" id="btn-status" onclick="readStatus(this)">刷新</button>
+                </div>
+            </div>
+            <div id="status-body">
+                <div class="panel-empty">按刷新获取数据</div>
+            </div>
+        </div>
 
-        client.on('connect', () => {
-            document.getElementById('conn-status').innerText = '已连接';
-            document.getElementById('conn-status').className = 'status-on';
-            client.subscribe('T'); // 订阅设备上报的主题
-        });
+        <!-- 区域2：开关控制 -->
+        <div class="bms-panel area-control">
+            <div class="panel-header">
+                <span class="panel-title">🎛 开关控制</span>
+                <div style="display:flex;align-items:center;">
+                    <span class="panel-meta" id="ctrl-time">--</span>
+                    <button class="refresh-btn" id="btn-ctrl" onclick="readControl(this)">刷新</button>
+                </div>
+            </div>
+            <div id="ctrl-body">
+                <div class="panel-empty">按刷新获取数据</div>
+            </div>
+        </div>
 
-        // 3. 处理设备回传数据
-        client.on('message', (topic, message) => {
-            try {
-                const data = JSON.parse(message.toString());
-                const log = document.getElementById('log-area');
-                
-                // 处理各种响应命令
-                if (data.cmd === "get_gps_status_bck") {
-                    let p = data.param;
-                    let usedCount = 0;
-                    
-                    // 提取参与定位的卫星数
-                    if (typeof p.used === 'object') {
-                        usedCount = p.used.total_sats || 0;
-                    } else {
-                        usedCount = p.used || 0;
-                    }
+        <!-- 区域3：单体电压 -->
+        <div class="bms-panel area-cells">
+            <div class="panel-header">
+                <span class="panel-title">🔬 单体电压</span>
+                <div style="display:flex;align-items:center;">
+                    <span class="panel-meta" id="cells-time">--</span>
+                    <button class="refresh-btn" id="btn-cells" onclick="readCells(this)">刷新</button>
+                </div>
+            </div>
+            <div id="cells-body">
+                <div class="panel-empty">按刷新获取数据</div>
+            </div>
+        </div>
 
-                    // 修正“可见：--”的问题
-                    // 如果 viewed 不存在，我们就用 usedCount 代替它，因为能定位 26 颗，可见至少也是 26 颗
-                    let viewedCount = p.viewed || usedCount; 
-                    let hdopVal = p.hdop || "--";
+    </div>
+</div>
 
-                    document.getElementById('sat-val').innerText = 
-                        `可见:${viewedCount} 参与定位:${usedCount} 精度:${hdopVal}`;
-                }
-                else if (data.cmd === "get_csq_bck") {
-                    document.getElementById('csq-val').innerText = `${data.param.csq} (RSSI:${data.param.rssi})`;
-                    log.innerText = "信号强度查询成功";
-                }
-                else if (data.cmd === "set_gps_interval_bck") {
-                    log.innerText = "上报间隔修改成功: " + data.msg;
-                }
-                else if (data.cmd === "get_imei_bck") {
-                    alert("设备IMEI: " + data.param.imei);
-                }
-                // 处理 GPS 数据（自动上报 或 get_gps 回复）
-                else if (data.lat || (data.param && data.param.lat)) {
-                    const gps = data.param ? data.param : data;
-                    updateMap(parseFloat(gps.lng), parseFloat(gps.lat), parseFloat(gps.spd), parseFloat(gps.alt));
-                }
-            } catch (e) { console.error("解析错误", e); }
-        });
+<script>
+// ══════════════════════════════════════════════════
+//  工具函数
+// ══════════════════════════════════════════════════
 
-        // 4. 发送指令函数
-        function sendCommand(cmdName, val) {
-            if (!client.connected) return alert("未连接到云端");
-            const payload = { cmd: cmdName };
-            if (val) payload.data = val;
-            
-            client.publish('R', JSON.stringify(payload)); // 发送到设备订阅的主题 R
-            document.getElementById('log-area').innerText = "已发送: " + cmdName;
+// CRC16 Modbus
+function crc16(buf) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < buf.length; i++) {
+        crc ^= buf[i];
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 1) ? (crc >>> 1) ^ 0xA001 : crc >>> 1;
+        }
+    }
+    return crc;
+}
+
+// 字节数组 → "XX XX" 格式字符串
+function toHexStr(arr) {
+    return arr.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+}
+
+// 构建 03H 读帧
+function buildRead03(slaveAddr, startReg, count) {
+    const buf = [
+        slaveAddr, 0x03,
+        (startReg >> 8) & 0xFF, startReg & 0xFF,
+        (count >> 8) & 0xFF,    count & 0xFF
+    ];
+    const crc = crc16(buf);
+    buf.push(crc & 0xFF, (crc >> 8) & 0xFF);
+    return toHexStr(buf);
+}
+
+// 构建 10H 写多寄存器帧，regs 为 16bit 无符号值数组
+function buildWrite10(slaveAddr, startReg, regs) {
+    const count = regs.length;
+    const buf = [
+        slaveAddr, 0x10,
+        (startReg >> 8) & 0xFF, startReg & 0xFF,
+        (count >> 8) & 0xFF,    count & 0xFF,
+        count * 2
+    ];
+    for (const v of regs) { buf.push((v >> 8) & 0xFF, v & 0xFF); }
+    const crc = crc16(buf);
+    buf.push(crc & 0xFF, (crc >> 8) & 0xFF);
+    return toHexStr(buf);
+}
+
+// hex字符串（有无空格皆可）→ 字节数组
+function hexToBytes(hex) {
+    const s = hex.replace(/\s+/g, '');
+    const out = [];
+    for (let i = 0; i < s.length; i += 2) out.push(parseInt(s.substr(i, 2), 16));
+    return out;
+}
+
+// 校验响应帧 CRC
+function verifyCRC(bytes) {
+    if (bytes.length < 4) return false;
+    const crc = crc16(bytes.slice(0, -2));
+    return bytes[bytes.length - 2] === (crc & 0xFF) &&
+           bytes[bytes.length - 1] === ((crc >> 8) & 0xFF);
+}
+
+// 从 03H 响应帧解析寄存器数组（无符号 16bit）
+function parseRegisters(bytes) {
+    const byteCount = bytes[2];
+    const regs = [];
+    for (let i = 0; i < byteCount; i += 2) {
+        regs.push(((bytes[3 + i] & 0xFF) << 8) | (bytes[4 + i] & 0xFF));
+    }
+    return regs;
+}
+
+// 有符号 16bit
+function int16(v) { return v >= 0x8000 ? v - 0x10000 : v; }
+
+// 无符号 32bit（两个连续寄存器，高16在前）
+function uint32(hi, lo) { return ((hi & 0xFFFF) * 65536) + (lo & 0xFFFF); }
+
+// 有符号 32bit
+function int32(hi, lo) {
+    const v = uint32(hi, lo);
+    return v >= 0x80000000 ? v - 0x100000000 : v;
+}
+
+// 当前时间字符串
+function nowStr() {
+    const d = new Date();
+    return [d.getHours(), d.getMinutes(), d.getSeconds()]
+        .map(n => String(n).padStart(2, '0')).join(':');
+}
+
+// ══════════════════════════════════════════════════
+//  MQTT 连接
+// ══════════════════════════════════════════════════
+const MQTT_URL  = 'wss://i0139f01.ala.cn-hangzhou.emqxsl.cn:8084/mqtt';
+const MQTT_OPTS = {
+    clientId: 'web_monitor_' + Math.random().toString(16).slice(2, 10),
+    username: 'zxc', password: '123456', clean: true
+};
+
+const client = mqtt.connect(MQTT_URL, MQTT_OPTS);
+
+// 等待响应队列（同一时刻只发一帧）
+let _pendingResolve = null;
+let _pendingReject  = null;
+let _pendingTimer   = null;
+
+function sendModbus(hexStr) {
+    return new Promise((resolve, reject) => {
+        if (!client.connected) { reject(new Error('未连接到云端')); return; }
+        if (_pendingTimer) { clearTimeout(_pendingTimer); }
+        _pendingResolve = resolve;
+        _pendingReject  = reject;
+        _pendingTimer = setTimeout(() => {
+            _pendingResolve = null; _pendingReject = null;
+            reject(new Error('响应超时(5s)'));
+        }, 5000);
+        client.publish('R', JSON.stringify({ cmd: 'uart_send', data: hexStr }));
+    });
+}
+
+client.on('connect', () => {
+    document.getElementById('conn-status').innerText  = '已连接';
+    document.getElementById('conn-status').className = 'status-on';
+    client.subscribe('T');
+});
+client.on('offline', () => {
+    document.getElementById('conn-status').innerText  = '已断开';
+    document.getElementById('conn-status').className = 'status-off';
+});
+
+client.on('message', (topic, message) => {
+    try {
+        const data = JSON.parse(message.toString());
+
+        // ── BMS 串口透传回复 ──
+        if (data.cmd === 'uart_recv' && data.data) {
+            if (_pendingResolve) {
+                clearTimeout(_pendingTimer);
+                const cb = _pendingResolve;
+                _pendingResolve = null; _pendingReject = null;
+                cb(hexToBytes(data.data));
+            }
+            return;
         }
 
-        // 5. 地图更新逻辑
-        function updateMap(lng, lat, spd, alt) {
-            if (!lng || !lat) return;
-            AMap.convertFrom([lng, lat], 'gps', function (status, result) {
-                if (result.info === 'ok') {
-                    const pos = result.locations[0];
-                    marker.setPosition(pos);
-                    map.setCenter(pos);
-                    document.getElementById('lng').innerText = lng.toFixed(5);
-                    document.getElementById('lat').innerText = lat.toFixed(5);
-                    document.getElementById('speed').innerText = (spd || 0).toFixed(1) + ' km/h';
-                }
-            });
+        // ── 原 GPS 相关回复（原始代码完整保留） ──
+        const log = document.getElementById('log-area');
+        if (data.cmd === 'get_gps_status_bck') {
+            let p = data.param, usedCount = 0;
+            if (typeof p.used === 'object') usedCount = p.used.total_sats || 0;
+            else usedCount = p.used || 0;
+            let viewedCount = p.viewed || usedCount;
+            document.getElementById('sat-val').innerText =
+                `可见:${viewedCount} 参与定位:${usedCount} 精度:${p.hdop || '--'}`;
+        } else if (data.cmd === 'get_csq_bck') {
+            document.getElementById('csq-val').innerText =
+                `${data.param.csq} (RSSI:${data.param.rssi})`;
+            log.innerText = '信号强度查询成功';
+        } else if (data.cmd === 'set_gps_interval_bck') {
+            log.innerText = '上报间隔修改成功: ' + data.msg;
+        } else if (data.cmd === 'get_imei_bck') {
+            alert('设备IMEI: ' + data.param.imei);
+        } else if (data.lat || (data.param && data.param.lat)) {
+            const gps = data.param ? data.param : data;
+            updateMap(parseFloat(gps.lng), parseFloat(gps.lat),
+                      parseFloat(gps.spd), parseFloat(gps.alt));
         }
-    </script>
+    } catch(e) { console.error('解析错误', e); }
+});
+
+// 原始 GPS 指令发送（保留）
+function sendCommand(cmdName, val) {
+    if (!client.connected) return alert('未连接到云端');
+    const payload = { cmd: cmdName };
+    if (val) payload.data = val;
+    client.publish('R', JSON.stringify(payload));
+    document.getElementById('log-area').innerText = '已发送: ' + cmdName;
+}
+
+// ══════════════════════════════════════════════════
+//  BMS 区域1：状态数据
+//  读 0x1244 起，共 81 个寄存器（0x51），至 0x12E6
+// ══════════════════════════════════════════════════
+// 寄存器偏移（相对于起始 0x1244，单位：寄存器=2字节）
+// 0x1244 off=0   CellVolAve     UINT16
+// 0x1246 off=1   CellVdifMax    UINT16
+// 0x1248 off=2   MaxCell(高8) MinCell(低8)
+// 0x128A off=35  TempMos        INT16  (0x128A-0x1244=0x46=70字节→35寄存器)
+// 0x1290 off=38  BatVol H       UINT32 (0x4C/2=38)
+// 0x1292 off=39  BatVol L
+// 0x1294 off=40  BatWatt H      UINT32
+// 0x1296 off=41  BatWatt L
+// 0x1298 off=42  BatCurrent H   INT32
+// 0x129A off=43  BatCurrent L
+// 0x129C off=44  TempBat1       INT16
+// 0x129E off=45  TempBat2       INT16
+// 0x12A0 off=46  Alarm H (BIT16-31) UINT32
+// 0x12A2 off=47  Alarm L (BIT0-15)
+// 0x12A4 off=50  BalanCurrent   INT16  (0x12A4-0x1244=0x60/2=48... 重算)
+// 实际偏移用 (绝对地址 - 0x1244) / 2 精确计算：
+// 0x12A4: (0x12A4-0x1244)/2 = 0x60/2 = 48  → off=48
+// 0x12A6: off=49  BalanSta(高8) SOC%(低8)
+// 0x12A8: off=50  SOCCapRemain H   INT32
+// 0x12AA: off=51  SOCCapRemain L
+// 0x12AC: off=52  SOCFullChargeCap H  UINT32
+// 0x12AE: off=53  SOCFullChargeCap L
+// 0x12B0: off=54  SOCCycleCount H  UINT32
+// 0x12B2: off=55  SOCCycleCount L
+// 0x12B4: off=56  SOCCycleCap H  UINT32
+// 0x12B6: off=57  SOCCycleCap L
+// 0x12C0: off=(0x12C0-0x1244)/2=0x7C/2=62  Charge(高8) DisCharge(低8)
+// 0x12E4: off=(0x12E4-0x1244)/2=0xA0/2=80  BatVol 0.01V  UINT16
+
+const ALARM_DEFS = [
+    '均衡线电阻过大',  // BIT0
+    'MOS过温保护',
+    '单体数量不符',
+    '电流传感器异常',
+    '单体过压保护',
+    '电池过压保护',
+    '充电过流保护',
+    '充电短路保护',
+    '充电过温保护',
+    '充电低温保护',
+    '内部通信异常',
+    '单体欠压保护',
+    '电池欠压保护',
+    '放电过流保护',
+    '放电短路保护',
+    '放电过温保护',  // BIT15
+    '充电管异常',    // BIT16
+    '放电管异常',
+    'GPS断开连接',
+    '请修改授权密码',
+    '放电开启失败',
+    '电池超温报警',  // BIT21
+];
+
+async function readStatus(btn) {
+    btn.disabled = true; btn.innerText = '读取中…';
+    document.getElementById('status-body').innerHTML =
+        '<div class="panel-empty"><span class="spin">⟳</span> 正在读取...</div>';
+    try {
+        const hex   = buildRead03(0x01, 0x1244, 0x0051);
+        const bytes = await sendModbus(hex);
+        if (!verifyCRC(bytes))  throw new Error('CRC校验失败');
+        if (bytes[1] & 0x80)    throw new Error('设备异常 0x' + bytes[2].toString(16).toUpperCase());
+        const r = parseRegisters(bytes);
+
+        const cellVolAve   = r[0];
+        const cellVdifMax  = r[1];
+        const maxCellNbr   = (r[2] >> 8) & 0xFF;
+        const minCellNbr   = r[2] & 0xFF;
+        const tempMos      = int16(r[35]) * 0.1;
+        const batVol       = uint32(r[38], r[39]);          // mV
+        const batWatt      = uint32(r[40], r[41]);          // mW
+        const batCurrent   = int32(r[42], r[43]);           // mA
+        const tempBat1     = int16(r[44]) * 0.1;
+        const tempBat2     = int16(r[45]) * 0.1;
+        const alarm32      = uint32(r[46], r[47]);
+        const balanCurrent = int16(r[48]);                  // mA
+        const balanSta     = (r[49] >> 8) & 0xFF;
+        const soc          = r[49] & 0xFF;                  // %
+        const capRemain    = int32(r[50], r[51]);           // mAH
+        const capFull      = uint32(r[52], r[53]);          // mAH
+        const cycleCount   = uint32(r[54], r[55]);
+        const cycleCap     = uint32(r[56], r[57]);          // mAH
+        const chargeState  = (r[62] >> 8) & 0xFF;
+        const discharState = r[62] & 0xFF;
+        const batVol2      = r[80] * 0.01;                  // V
+
+        const balanStaStr  = ['关闭','充电均衡','放电均衡'][balanSta] || '--';
+        const curSign      = batCurrent >= 0 ? '+' : '';
+        const socCls       = soc > 50 ? 'good' : soc > 20 ? 'warn' : 'bad';
+
+        let html = '';
+
+        // 电气参数
+        html += `<div class="group-title">电气参数</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">电池总电压</span><span class="data-value">${(batVol/1000).toFixed(3)} V</span></div>
+        <div class="data-row"><span class="data-label">电池电流</span><span class="data-value">${curSign}${(batCurrent/1000).toFixed(3)} A</span></div>
+        <div class="data-row"><span class="data-label">电池功率</span><span class="data-value">${(batWatt/1000).toFixed(2)} W</span></div>
+        <div class="data-row"><span class="data-label">电池电压(粗)</span><span class="data-value">${batVol2.toFixed(2)} V</span></div>
+        </div>`;
+
+        // 容量 & SOC
+        html += `<div class="group-title">容量 / SOC</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">剩余电量 SOC</span><span class="data-value ${socCls}">${soc} %</span></div>
+        <div class="data-row"><span class="data-label">剩余容量</span><span class="data-value">${(capRemain/1000).toFixed(2)} Ah</span></div>
+        <div class="data-row"><span class="data-label">满充容量</span><span class="data-value">${(capFull/1000).toFixed(2)} Ah</span></div>
+        <div class="data-row"><span class="data-label">循环次数</span><span class="data-value">${cycleCount} 次</span></div>
+        <div class="data-row"><span class="data-label">累计循环容量</span><span class="data-value">${(cycleCap/1000).toFixed(2)} Ah</span></div>
+        </div>`;
+
+        // 温度
+        html += `<div class="group-title">温度</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">功率板温度</span><span class="data-value">${tempMos.toFixed(1)} ℃</span></div>
+        <div class="data-row"><span class="data-label">电池温度 1</span><span class="data-value">${tempBat1.toFixed(1)} ℃</span></div>
+        <div class="data-row"><span class="data-label">电池温度 2</span><span class="data-value">${tempBat2.toFixed(1)} ℃</span></div>
+        </div>`;
+
+        // 单体摘要
+        html += `<div class="group-title">单体摘要</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">平均电压</span><span class="data-value">${cellVolAve} mV</span></div>
+        <div class="data-row"><span class="data-label">最大压差</span><span class="data-value ${cellVdifMax>50?'warn':''}">${cellVdifMax} mV</span></div>
+        <div class="data-row"><span class="data-label">最高压单体</span><span class="data-value">C${maxCellNbr}</span></div>
+        <div class="data-row"><span class="data-label">最低压单体</span><span class="data-value">C${minCellNbr}</span></div>
+        </div>`;
+
+        // 均衡
+        html += `<div class="group-title">均衡</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">均衡状态</span><span class="data-value">${balanStaStr}</span></div>
+        <div class="data-row"><span class="data-label">均衡电流</span><span class="data-value">${balanCurrent} mA</span></div>
+        </div>`;
+
+        // 充放电状态
+        html += `<div class="group-title">充放电</div>
+        <div class="panel-body">
+        <div class="data-row"><span class="data-label">充电状态</span><span class="data-value ${chargeState?'good':'bad'}">${chargeState?'开启':'关闭'}</span></div>
+        <div class="data-row"><span class="data-label">放电状态</span><span class="data-value ${discharState?'good':'bad'}">${discharState?'开启':'关闭'}</span></div>
+        </div>`;
+
+        // 报警位
+        const hasAlarm = alarm32 !== 0;
+        const alarmTag = hasAlarm
+            ? '<span style="color:var(--warn);font-size:11px;">⚠ 有故障</span>'
+            : '<span style="color:var(--green);font-size:11px;">✓ 正常</span>';
+        html += `<div class="group-title">报警状态 ${alarmTag}</div>
+        <div class="alarm-grid">`;
+        for (let i = 0; i < ALARM_DEFS.length; i++) {
+            const fault = (alarm32 >>> i) & 1;
+            html += `<div class="alarm-item ${fault?'fault':''}">
+                <div class="alarm-dot"></div>
+                <span>${ALARM_DEFS[i]}</span>
+            </div>`;
+        }
+        html += '</div>';
+
+        document.getElementById('status-body').innerHTML = html;
+        document.getElementById('status-time').innerText = nowStr();
+    } catch(e) {
+        document.getElementById('status-body').innerHTML =
+            `<div class="panel-empty" style="color:var(--warn);">⚠ ${e.message || e}</div>`;
+    }
+    btn.disabled = false; btn.innerText = '刷新';
+}
+
+// ══════════════════════════════════════════════════
+//  BMS 区域2：开关控制
+//  读 0x1070 起 5 个寄存器
+//  0x1070 = r[0] → BatChargeEN
+//  0x1072 = r[1] （保留）
+//  0x1074 = r[2] → BatDisChargeEN
+//  0x1076 = r[3] （保留）
+//  0x1078 = r[4] → BalanEN
+// ══════════════════════════════════════════════════
+const SWITCH_DEFS = [
+    { label: '充电开关', name: 'BatChargeEN',    reg: 0x1070, rIdx: 0 },
+    { label: '放电开关', name: 'BatDisChargeEN', reg: 0x1074, rIdx: 2 },
+    { label: '均衡开关', name: 'BalanEN',        reg: 0x1078, rIdx: 4 },
+];
+
+async function readControl(btn) {
+    btn.disabled = true; btn.innerText = '读取中…';
+    document.getElementById('ctrl-body').innerHTML =
+        '<div class="panel-empty"><span class="spin">⟳</span> 正在读取...</div>';
+    try {
+        const hex   = buildRead03(0x01, 0x1070, 0x0005);
+        const bytes = await sendModbus(hex);
+        if (!verifyCRC(bytes)) throw new Error('CRC校验失败');
+        if (bytes[1] & 0x80)   throw new Error('设备异常 0x' + bytes[2].toString(16).toUpperCase());
+        const r = parseRegisters(bytes);
+        renderControl(r);
+        document.getElementById('ctrl-time').innerText = nowStr();
+    } catch(e) {
+        document.getElementById('ctrl-body').innerHTML =
+            `<div class="panel-empty" style="color:var(--warn);">⚠ ${e.message || e}</div>`;
+    }
+    btn.disabled = false; btn.innerText = '刷新';
+}
+
+function renderControl(r) {
+    let html = '<div class="panel-body">';
+    for (const sw of SWITCH_DEFS) {
+        const isOn = (r[sw.rIdx] & 0x0001) === 1;
+        html += `<div class="switch-row">
+            <span class="switch-label">${sw.label}</span>
+            <div class="switch-right">
+                <span class="sw-state ${isOn?'on':'off'}">${isOn?'开':'关'}</span>
+                <button class="sw-btn-on"  onclick="writeSwitch(0x${sw.reg.toString(16)}, 1)">开</button>
+                <button class="sw-btn-off" onclick="writeSwitch(0x${sw.reg.toString(16)}, 0)">关</button>
+            </div>
+        </div>`;
+    }
+    html += '</div>';
+    document.getElementById('ctrl-body').innerHTML = html;
+}
+
+async function writeSwitch(reg, val) {
+    if (!client.connected) { alert('未连接'); return; }
+    const swDef = SWITCH_DEFS.find(s => s.reg === reg);
+    const label = swDef ? swDef.label : '0x' + reg.toString(16).toUpperCase();
+    if (!confirm(`确认${val ? '开启' : '关闭'} ${label}？`)) return;
+    try {
+        const hex   = buildWrite10(0x01, reg, [val]);
+        const bytes = await sendModbus(hex);
+        if (!verifyCRC(bytes)) throw new Error('CRC校验失败');
+        if (bytes[1] & 0x80)   throw new Error('写入失败 0x' + bytes[2].toString(16).toUpperCase());
+        // 写入成功后静默刷新
+        setTimeout(refreshControlSilent, 200);
+    } catch(e) {
+        alert('写入失败: ' + (e.message || e));
+    }
+}
+
+async function refreshControlSilent() {
+    try {
+        const hex   = buildRead03(0x01, 0x1070, 0x0005);
+        const bytes = await sendModbus(hex);
+        if (!verifyCRC(bytes) || (bytes[1] & 0x80)) return;
+        renderControl(parseRegisters(bytes));
+        document.getElementById('ctrl-time').innerText = nowStr();
+    } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════
+//  BMS 区域3：单体电压
+//  读 0x1200 起 16 个寄存器
+// ══════════════════════════════════════════════════
+async function readCells(btn) {
+    btn.disabled = true; btn.innerText = '读取中…';
+    document.getElementById('cells-body').innerHTML =
+        '<div class="panel-empty"><span class="spin">⟳</span> 正在读取...</div>';
+    try {
+        const hex   = buildRead03(0x01, 0x1200, 0x0010);
+        const bytes = await sendModbus(hex);
+        if (!verifyCRC(bytes)) throw new Error('CRC校验失败');
+        if (bytes[1] & 0x80)   throw new Error('设备异常 0x' + bytes[2].toString(16).toUpperCase());
+        const r    = parseRegisters(bytes);           // r[0..15] mV
+        const maxV = Math.max(...r);
+        const minV = Math.min(...r);
+
+        let html = '<div class="cell-grid">';
+        for (let i = 0; i < 16; i++) {
+            const v   = r[i];
+            const cls = v === maxV ? 'cell-high' : v === minV ? 'cell-low' : 'cell-ok';
+            html += `<div class="cell-item ${cls}">
+                <div class="cell-num">C${String(i+1).padStart(2,'0')}</div>
+                <div class="cell-val">${v}</div>
+            </div>`;
+        }
+        html += '</div>';
+
+        // 摘要
+        const avgV = Math.round(r.reduce((a,b)=>a+b,0) / r.length);
+        html += `<div class="panel-body" style="padding-top:0;">
+            <div class="data-row"><span class="data-label">最高单体</span>
+                <span class="data-value bad">${maxV} mV &nbsp;(C${r.indexOf(maxV)+1})</span></div>
+            <div class="data-row"><span class="data-label">最低单体</span>
+                <span class="data-value warn">${minV} mV &nbsp;(C${r.indexOf(minV)+1})</span></div>
+            <div class="data-row"><span class="data-label">平均电压</span>
+                <span class="data-value">${avgV} mV</span></div>
+            <div class="data-row"><span class="data-label">最大压差</span>
+                <span class="data-value ${(maxV-minV)>50?'warn':''}">${maxV - minV} mV</span></div>
+        </div>`;
+
+        document.getElementById('cells-body').innerHTML = html;
+        document.getElementById('cells-time').innerText = nowStr();
+    } catch(e) {
+        document.getElementById('cells-body').innerHTML =
+            `<div class="panel-empty" style="color:var(--warn);">⚠ ${e.message || e}</div>`;
+    }
+    btn.disabled = false; btn.innerText = '刷新';
+}
+
+// ══════════════════════════════════════════════════
+//  Tab 切换
+// ══════════════════════════════════════════════════
+function switchTab(name, el) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('page-' + name).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════
+//  高德地图（原始代码完整保留）
+// ══════════════════════════════════════════════════
+const map = new AMap.Map('container', { zoom: 16, center: [113.222351, 33.774272] });
+const marker = new AMap.Marker({
+    map: map,
+    icon: 'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-default.png'
+});
+
+function updateMap(lng, lat, spd, alt) {
+    if (!lng || !lat) return;
+    AMap.convertFrom([lng, lat], 'gps', function(status, result) {
+        if (result.info === 'ok') {
+            const pos = result.locations[0];
+            marker.setPosition(pos);
+            map.setCenter(pos);
+            document.getElementById('lng').innerText   = lng.toFixed(5);
+            document.getElementById('lat').innerText   = lat.toFixed(5);
+            document.getElementById('speed').innerText = (spd || 0).toFixed(1) + ' km/h';
+        }
+    });
+}
+</script>
 </body>
 </html>
