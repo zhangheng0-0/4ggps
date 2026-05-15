@@ -1,0 +1,109 @@
+function
+	local tname="M100P"
+	log.info(tname,"start")
+	local nid=1
+	local uid=1
+	PronetStopProRecCh(1)
+	UartStopProRecCh(1)
+	local sdid = 1
+	local lastSendTime = 0
+	local gpsInterval = 600
+
+	while true do
+		-- ① 接收MQTT下发数据
+		local netr = PronetGetRecChAndDel(nid)
+		if netr then
+			log.info(tname, "netr raw", netr)
+			local obj, r = json.decode(netr)
+			if r and obj and obj.cmd then
+
+				-- 【修改点1】发送逻辑：支持云端发来 Hex 字符串
+				if obj.cmd == "uart_send" and obj.data then
+					-- 去掉空格
+					local rawData = obj.data:gsub(" ", "")
+					-- 自动判断：如果是合法的 Hex 字符串就转成字节发出去
+					if #rawData % 2 == 0 and rawData:match("^[0-9a-fA-F]+$") then
+						UartSetSendCh(uid, rawData:fromHex())
+						log.info(tname, "已发送字节流", rawData)
+					else
+						-- 否则按普通文本发
+						UartSetSendCh(uid, obj.data)
+						log.info(tname, "按文本发送", obj.data)
+					end
+
+				elseif obj.cmd == "set_gps_interval" and obj.data then
+					local n = tonumber(obj.data)
+					if n then
+						gpsInterval = n
+						PronetSetSendCh(nid, json.encode({cmd="set_gps_interval_bck", msg="OK"}))
+					end
+
+				elseif obj.cmd == "get_gps_status" then
+					local used, viewed = libgnss.getGsv()
+					local gga = libgnss.getGga(2) 
+					local b = {
+						cmd = "get_gps_status_bck",
+						param = { viewed = viewed, used = used, hdop = gga.hdop or 99.9, fix = libgnss.isFix() and 1 or 0 }
+					}
+					PronetSetSendCh(nid, json.encode(b))
+
+				elseif obj.cmd == "get_csq" then
+					local csq = mobile.csq()
+					local rssi = (csq > 29) and 100 or (csq * 3)
+					PronetSetSendCh(nid, json.encode({cmd="get_csq_bck", param={csq=csq, rssi=rssi}}))
+
+				elseif obj.cmd == "get_imei" then
+					PronetSetSendCh(nid, json.encode({cmd="get_imei_bck", param={imei=mobile.imei()}}))
+
+				elseif obj.cmd == "get_gps" then
+					local b = {cmd="get_gps_bck", param={}}
+					if libgnss.isFix() then
+						local tg = libgnss.getRmc(2)
+						local ga = libgnss.getGga(2)
+						b.param = {fix=1, lat=tg.lat, lng=tg.lng, spd=tg.speed, alt=math.floor(ga.altitude + 0.5)}
+					else
+						b.param.fix = 0
+					end
+					PronetSetSendCh(nid, json.encode(b))
+
+				elseif obj.cmd == "reboot" then
+					rtos.reboot()
+				end
+			end
+		end
+
+		-- ② 【修改点2】接收上报逻辑：把串口字节转成可见的 Hex 字符串
+		local uartr = UartGetRecChAndDel(uid)
+		if uartr and #uartr > 0 then
+			-- 使用 .toHex() 把原始字节变成 "0103100C..." 这种你能看懂的字
+			local hexStr = uartr:toHex()
+			log.info(tname, "串口收到原始数据转Hex", hexStr)
+			
+			local b = {
+				cmd = "uart_recv",
+				data = hexStr -- 这样发给云端，你就不会看到 \u0001 了
+			}
+			PronetSetSendCh(nid, json.encode(b))
+		end
+
+		-- ③ 定期发送GPS数据
+		local currentTime = os.time()
+		if currentTime - lastSendTime >= gpsInterval then 
+			lastSendTime = currentTime
+			if libgnss.isFix() then
+				local d = {
+					lat = libgnss.getRmc(2).lat,
+					lng = libgnss.getRmc(2).lng,
+					spd = libgnss.getRmc(2).speed,
+					alt = math.floor(libgnss.getGga(2).altitude + 0.5)
+				}
+				local updata = json.encode(d)
+				if updata and PronetGetNetSta(nid) == 1 then
+					PronetSetSendCh(nid, updata)
+				end
+			end
+		end
+
+		sys.wait(100)
+	end
+end
